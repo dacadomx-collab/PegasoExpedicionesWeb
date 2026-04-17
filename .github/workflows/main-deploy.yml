@@ -3,7 +3,7 @@ name: 🚀 Deploy to Pegaso Production
 on:
   push:
     branches:
-      - main # Solo se ejecuta cuando mandas cambios a la rama main
+      - main
 
 jobs:
   web-deploy:
@@ -21,6 +21,7 @@ jobs:
         password: ${{ secrets.FTP_PASSWORD }}
         port: 21
         protocol: ftps # Usamos FTPS explícito como solicitaste para mayor seguridad
+        server-dir: public_html/ 
         exclude: |
           **/.git*
           **/.git*/**

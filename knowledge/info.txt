@@ -1,6 +1,10 @@
 https://pegasoexpediciones.com/
 
 
+https://github.com/dacadomx-collab/PegasoExpedicionesWeb.git
+
+C:\xampp\htdocs\PegasoExpedicionesDev
+
 ***********************************************************************************************		 FTP 		********************************************
 ********************************************
 Nombre de usuario de FTP: ftp_user@pegasoexpediciones.com
