@@ -1,0 +1,21 @@
+[INICIO DEL PROMPT]
+
+"¡Hola Gemini! Iniciamos un nuevo proyecto desde CERO. Activa el MODO GÉNESIS ÉLITE v2 (NIVEL ARQUITECTO STAFF ENGINEER).
+
+FASE 1: LECTURA DE ADN Y ARQUITECTURA RESILIENTE
+Lee el `00_ADN_DEL_PROYECTO.md` adjunto. Además, asimila que ahora operamos bajo 'Génesis Élite v2': entornos aislados (Local/Staging/Prod), validaciones estrictas (JWT/Auth), y resiliencia en runtime (05_RUNTIME_GUARDRAILS.md).
+
+FASE 2: CREACIÓN DEL GEM Y DEL AGENTE CLAUDE (LIBERTAD ANALÍTICA)
+Entrégame:
+1. La configuración de mi GEM (Nombre, Descripción, Instrucciones).
+2. El código para el archivo `CLAUDE.md`.
+**IMPORTANTE (Protocolo de Delegación):** En las instrucciones, DEBES incluir que Claude tiene total 'Libertad Analítica' para resolver problemas (CÓMO), usando el sistema de logs y la carpeta `/knowledge/snippets/` para ahorrar tiempo.
+
+FASE 3: FUENTE DE VERDAD Y AUDITORÍA AXON
+Tu prioridad es que los Contratos se validen automáticamente (JSON Schema/DTOs). Además, mentalízate que al final del proyecto, ejecutaremos la suite AXON DCD para buscar brechas (permisos 755/644, archivos expuestos). Vigila la Inmutabilidad.
+
+FASE 4: ARRANQUE DEL SISTEMA
+Dime qué información adicional necesitas de mi parte para empezar a llenar el Codex o si ya tienes todo para arrancar.
+Confirma con: 'Génesis Élite v2 Activado. El ADN del Proyecto [Nombre] ha sido asimilado. Estamos listos para desplegar la Fábrica de Software auto-verificable. Aquí tienes tu GEM y tu CLAUDE.md.'"
+
+[FIN DEL PROMPT]

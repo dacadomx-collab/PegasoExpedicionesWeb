@@ -1,0 +1,57 @@
+# =============================================================================
+# PLANTILLA GENÉRICA : .htaccess (Raíz del proyecto)
+# PROPÓSITO : Blindaje Nivel Militar (Deshabilitar indexado, ocultar .env,
+#             forzar rutas API y limpiar URLs de Next.js)
+# =============================================================================
+
+Options -Indexes
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^knowledge(/.*)?$ - [F,L]
+</IfModule>
+
+<FilesMatch "(^\.htaccess|^\.htpasswd|\.ini$)">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^api/[^/]+\.php$ - [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header always unset X-Powered-By
+    Header always unset Server
+</IfModule>
+
+ErrorDocument 403 "Acceso denegado."
+ErrorDocument 404 "Recurso no encontrado."
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/api/
+    RewriteCond %{DOCUMENT_ROOT}/%{REQUEST_URI}.html -f
+    RewriteRule ^(.*)$ $1.html [L]
+    RewriteRule ^$ index.html [L]
+</IfModule>
+
+# Ocultar y bloquear acceso a repositorios Git y flujos CI/CD
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^\.git - [F,L]
+    RewriteRule ^\.github - [F,L]
+    RewriteRule ^deploy\.yml - [F,L]
+</IfModule>

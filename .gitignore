@@ -1,0 +1,13 @@
+# .gitignore
+# Excluir archivos de entorno y configuraciones sensibles
+.env
+config.local.php
+*.log
+
+# Excluir dependencias (si usas Composer o NPM a futuro)
+vendor/
+node_modules/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db

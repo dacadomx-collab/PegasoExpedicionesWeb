@@ -1,0 +1,17 @@
+https://pegasoexpediciones.com/
+
+
+***********************************************************************************************		 FTP 		********************************************
+********************************************
+Nombre de usuario de FTP: ftp_user@pegasoexpediciones.com
+pass: sv($~)twT@uQrkE@
+Servidor FTP: ftp.pegasoexpediciones.com
+Puerto FTPS explícito de FTP &:  21
+
+***********************************************************************************************		 DataBase 	************
+********************************************
+********************************************
+Base de datos: pegaso_web_services_DB
+Usuarios con privilegio: 	
+pegaso_user_db
+pass: HiPAzD[k*fe~b-fs
