@@ -1,0 +1,25 @@
+# ============================================================
+# PEGASO EXPEDICIONES — HTACCESS NIVEL MILITAR (AXON DCD)
+# ============================================================
+
+Options -Indexes
+
+# --- Bloqueo absoluto de archivos sensibles ---
+<FilesMatch "^\.env(\.example)?$|error\.log$|\.sql$|\.md$|composer\.(json|lock)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# --- Cabeceras de seguridad ---
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# --- Proteger directorio logs/ ---
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^logs/ - [F,L]
+</IfModule>

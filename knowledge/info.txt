@@ -4,6 +4,22 @@ https://pegasoexpediciones.com/
 https://github.com/dacadomx-collab/PegasoExpedicionesWeb.git
 
 C:\xampp\htdocs\PegasoExpedicionesDev
+************************************************************************************************************* Ejecutar Servidor ******* 
+******************************************************************************************************
+cd booking-engine
+Correr servidor
+npm run dev
+http://localhost:3000/admin/
+
+revisaR, buscar errores de TypeScript
+npx tsc --noEmit
+
+Crear Carpeta Out
+npm run build
+
+Simulador real local un mini-servidor local de producción:
+npx serve out
+Te dará un enlace (ej. http://localhost:3000)
 
 ***********************************************************************************************		 FTP 		********************************************
 ********************************************
@@ -19,3 +35,7 @@ Base de datos: pegaso_web_services_DB
 Usuarios con privilegio: 	
 pegaso_user_db
 pass: HiPAzD[k*fe~b-fs
+
+********************************************
+
+********************************************

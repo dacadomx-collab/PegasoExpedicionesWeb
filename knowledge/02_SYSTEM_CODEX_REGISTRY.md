@@ -1,7 +1,7 @@
 # 🧬 SYSTEM CODEX & REGISTRY — Pegaso Expediciones
 **v2 | Sistema de Reservas y Pagos con PayPal Checkout**
 **Proyecto:** Turismo de Aventura (Tiburón Ballena, Buceo, etc.)
-**Última actualización:** 2026-04-15 | **Modo:** Génesis Élite v2
+**Última actualización:** 2026-04-17 | **Modo:** Génesis Élite v2
 
 > ⚠️ **MANDAMIENTO #4 EN VIGOR:** Si una variable, tabla o componente **NO aparece aquí**, la IA debe **DETENERSE** y solicitar registro explícito al Arquitecto antes de proceder.
 
@@ -204,3 +204,75 @@ CREATE TABLE `log_errores` (
 - `SelectorFecha`: Solo muestra fechas donde `activo = 1` y `cupo_disponible > 0`. Deshabilita fechas pasadas en frontend Y backend.
 - `ResumenPago`: El campo `totalPagado` es de SOLO LECTURA. Nunca editable por el usuario. Viene del backend.
 - `BotonPayPal`: Se renderiza SOLO después de que el backend confirme la creación de la orden (`orden_paypal` disponible).
+
+---
+
+## 🏗️ INFRAESTRUCTURA BACKEND — REGISTRO v2 (2026-04-17)
+
+> Estado: **VALIDADO** por `test_crud.php` — schema confirmado en servidor local.
+
+### Archivos de Fundación (Mandamiento #11)
+
+| Archivo | Ruta | Descripción | Estado |
+| :--- | :--- | :--- | :--- |
+| Variables de entorno | `.env` | Credenciales locales. **NUNCA commitear.** | ✅ Creado |
+| Plantilla pública | `.env.example` | Plantilla sin valores reales. Sí commiteable. | ✅ Creado |
+| Blindaje Apache | `.htaccess` | Bloquea `.env`, `logs/`, `.md`, `.sql` desde navegador. | ✅ Creado |
+| Conexión PDO | `api/Database.php` | Singleton. Unico punto de acceso a BD. | ✅ Creado |
+
+### Credenciales de BD (Entorno Local)
+
+| Variable `.env` | Valor |
+| :--- | :--- |
+| `DB_HOST` | `127.0.0.1` |
+| `DB_PORT` | `3306` |
+| `DB_NAME` | `pegaso_web_services_DB` |
+| `DB_USER` | `pegaso_user_db` |
+| `DB_CHARSET` | `utf8mb4` |
+| `LOG_PATH` | `logs/error.log` |
+
+### PKs Canónicas (schema real en BD)
+
+> ⚠️ Las PKs de todas las tablas se llaman `id` (no `expedicion_id` etc.). Los nombres `_id` del mapeo arriba se refieren a **columnas FK en otras tablas**, no a las PKs.
+
+| Tabla | PK real | FK que la referencia |
+| :--- | :--- | :--- |
+| `expediciones` | `id` | `fechas_expedicion.expedicion_id`, `reservas.expedicion_id` |
+| `fechas_expedicion` | `id` | `reservas.fecha_expedicion_id` |
+| `reservas` | `id` | `transacciones_paypal.reserva_id` |
+| `transacciones_paypal` | `id` | — |
+| `log_errores` | `id` | — |
+
+### Reglas de Integridad Referencial Confirmadas
+
+| Relación | Tipo | Comportamiento |
+| :--- | :--- | :--- |
+| `fechas_expedicion` → `expediciones` | FK | `ON DELETE CASCADE` (borra fechas al borrar expedición) |
+| `reservas` → `expediciones` | FK | Sin acción explícita = `RESTRICT` (no borra expedición con reservas) |
+| `reservas` → `fechas_expedicion` | FK | Sin acción explícita = `RESTRICT` |
+| `transacciones_paypal` → `reservas` | FK | `ON DELETE SET NULL` (preserva el log aunque se borre la reserva) |
+
+### Columnas de tipo JSON en BD
+
+| Tabla | Columna | Contenido esperado |
+| :--- | :--- | :--- |
+| `transacciones_paypal` | `respuesta_json` | Respuesta raw de la API PayPal. Siempre `json_encode()` antes de insertar, `json_decode($val, true)` al leer. |
+| `log_errores` | `contexto_json` | Payload de entrada al momento del error. Mismas reglas de encode/decode. |
+
+### Orden de INSERT obligatorio (restricciones FK)
+
+```
+1. expediciones
+2. fechas_expedicion  (necesita expedicion_id)
+3. reservas           (necesita expedicion_id + fecha_expedicion_id)
+4. transacciones_paypal (necesita reserva_id)
+```
+
+### Orden de DELETE obligatorio (evitar FK violation)
+
+```
+1. transacciones_paypal
+2. reservas
+3. fechas_expedicion
+4. expediciones
+```
