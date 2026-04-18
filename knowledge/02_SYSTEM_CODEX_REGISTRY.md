@@ -1,7 +1,7 @@
 # 🧬 SYSTEM CODEX & REGISTRY — Pegaso Expediciones
 **v2 | Sistema de Reservas y Pagos con PayPal Checkout**
 **Proyecto:** Turismo de Aventura (Tiburón Ballena, Buceo, etc.)
-**Última actualización:** 2026-04-17 | **Modo:** Génesis Élite v2
+**Última actualización:** 2026-04-17 (Schema migrado a inglés — Escenario A confirmado) | **Modo:** Génesis Élite v2
 
 > ⚠️ **MANDAMIENTO #4 EN VIGOR:** Si una variable, tabla o componente **NO aparece aquí**, la IA debe **DETENERSE** y solicitar registro explícito al Arquitecto antes de proceder.
 
@@ -80,109 +80,129 @@
 ## 🗄️ SQL SCHEMA CANÓNICO (FUENTE DE VERDAD)
 
 > ⚠️ **MANDAMIENTO #9:** Ninguna IA puede alterar este schema sin autorización humana explícita.
+> ✅ **2026-04-17:** Schema migrado a inglés — Escenario A confirmado por humano. Tablas físicas en servidor en inglés.
 
 ```sql
 -- ============================================================
 -- PROYECTO: PEGASO EXPEDICIONES - Sistema de Reservas v2
 -- CHARSET: utf8mb4 | ENGINE: InnoDB
+-- SCHEMA: INGLÉS (confirmado 2026-04-17)
 -- ============================================================
 
-CREATE TABLE `expediciones` (
-    `id`           INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-    `nombre`       VARCHAR(255)    NOT NULL,
-    `descripcion`  TEXT,
-    `precio`       DECIMAL(10,2)   NOT NULL,
-    `cupo_maximo`  INT UNSIGNED    NOT NULL,
-    `imagen_url`   VARCHAR(500),
-    `activo`       TINYINT(1)      NOT NULL DEFAULT 1,
+CREATE TABLE `expeditions` (
+    `id`            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    `name`          VARCHAR(255)    NOT NULL,
+    `description`   TEXT,
+    `price`         DECIMAL(10,2)   NOT NULL,
+    `max_capacity`  INT UNSIGNED    NOT NULL,
+    `image_url`     VARCHAR(500),
+    `status`        ENUM('active','inactive') NOT NULL DEFAULT 'active',
+    `custom_fields` JSON,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-CREATE TABLE `fechas_expedicion` (
+CREATE TABLE `expedition_dates` (
     `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `expedicion_id`    INT UNSIGNED NOT NULL,
-    `fecha_salida`     DATE         NOT NULL,
-    `cupo_disponible`  INT UNSIGNED NOT NULL,
-    `activo`           TINYINT(1)   NOT NULL DEFAULT 1,
+    `expedition_id`    INT UNSIGNED NOT NULL,
+    `departure_date`   DATE         NOT NULL,
+    `available_spots`  INT UNSIGNED NOT NULL,
+    `status`           ENUM('active','inactive') NOT NULL DEFAULT 'active',
     PRIMARY KEY (`id`),
-    CONSTRAINT `fk_fechas_expedicion`
-        FOREIGN KEY (`expedicion_id`) REFERENCES `expediciones`(`id`) ON DELETE CASCADE,
-    INDEX `idx_expedicion_activo` (`expedicion_id`, `activo`)
+    CONSTRAINT `fk_expedition_dates_expedition`
+        FOREIGN KEY (`expedition_id`) REFERENCES `expeditions`(`id`) ON DELETE CASCADE,
+    INDEX `idx_expedition_status` (`expedition_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-CREATE TABLE `reservas` (
-    `id`                   INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `expedicion_id`        INT UNSIGNED  NOT NULL,
-    `fecha_expedicion_id`  INT UNSIGNED  NOT NULL,
-    `cliente_nombre`       VARCHAR(255)  NOT NULL,
-    `cliente_email`        VARCHAR(255)  NOT NULL,
-    `cliente_telefono`     VARCHAR(20)   NOT NULL,
-    `num_lugares`          TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `total_pagado`         DECIMAL(10,2) NOT NULL,
-    `estatus_pago`         ENUM('pendiente','completado','fallido','reembolsado')
-                           NOT NULL DEFAULT 'pendiente',
-    `orden_paypal`         VARCHAR(100)  NOT NULL UNIQUE,
-    `transaccion_paypal`   VARCHAR(100)  UNIQUE,
-    `fecha_reserva`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `ip_cliente`           VARCHAR(45),
+CREATE TABLE `customers` (
+    `id`    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `name`  VARCHAR(255) NOT NULL,
+    `email` VARCHAR(255) NOT NULL,
+    `phone` VARCHAR(20)  NOT NULL,
     PRIMARY KEY (`id`),
-    CONSTRAINT `fk_reservas_expedicion`
-        FOREIGN KEY (`expedicion_id`) REFERENCES `expediciones`(`id`),
-    CONSTRAINT `fk_reservas_fecha`
-        FOREIGN KEY (`fecha_expedicion_id`) REFERENCES `fechas_expedicion`(`id`),
-    INDEX `idx_orden_paypal` (`orden_paypal`),
-    INDEX `idx_estatus_pago` (`estatus_pago`)
+    INDEX `idx_customer_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-CREATE TABLE `transacciones_paypal` (
+CREATE TABLE `bookings` (
+    `id`                     INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `expedition_id`          INT UNSIGNED  NOT NULL,
+    `expedition_date_id`     INT UNSIGNED  NOT NULL,
+    `customer_id`            INT UNSIGNED  NOT NULL,
+    `num_spots`              TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    `total_amount`           DECIMAL(10,2) NOT NULL,
+    `payment_status`         ENUM('pending','completed','failed','refunded')
+                             NOT NULL DEFAULT 'pending',
+    `paypal_order_id`        VARCHAR(100)  NOT NULL UNIQUE,
+    `paypal_transaction_id`  VARCHAR(100)  UNIQUE,
+    `created_at`             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `client_ip`              VARCHAR(45),
+    PRIMARY KEY (`id`),
+    CONSTRAINT `fk_bookings_expedition`
+        FOREIGN KEY (`expedition_id`) REFERENCES `expeditions`(`id`),
+    CONSTRAINT `fk_bookings_date`
+        FOREIGN KEY (`expedition_date_id`) REFERENCES `expedition_dates`(`id`),
+    CONSTRAINT `fk_bookings_customer`
+        FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`),
+    INDEX `idx_paypal_order` (`paypal_order_id`),
+    INDEX `idx_payment_status` (`payment_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `paypal_transactions` (
     `id`             INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `reserva_id`     INT UNSIGNED,
-    `orden_paypal`   VARCHAR(100) NOT NULL,
+    `booking_id`     INT UNSIGNED,
+    `paypal_order_id` VARCHAR(100) NOT NULL,
     `capture_id`     VARCHAR(100),
-    `fase`           ENUM('orden_creada','captura_exitosa','captura_fallida') NOT NULL,
-    `respuesta_json` JSON,
-    `fecha_evento`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `phase`          ENUM('order_created','capture_success','capture_failed') NOT NULL,
+    `response_json`  JSON,
+    `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    CONSTRAINT `fk_txn_reserva`
-        FOREIGN KEY (`reserva_id`) REFERENCES `reservas`(`id`) ON DELETE SET NULL,
-    INDEX `idx_orden_txn` (`orden_paypal`)
+    CONSTRAINT `fk_txn_booking`
+        FOREIGN KEY (`booking_id`) REFERENCES `bookings`(`id`) ON DELETE SET NULL,
+    INDEX `idx_order_txn` (`paypal_order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-CREATE TABLE `log_errores` (
-    `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `endpoint`      VARCHAR(100),
-    `nivel`         ENUM('WARNING','ERROR','CRITICAL') NOT NULL DEFAULT 'ERROR',
-    `mensaje`       TEXT NOT NULL,
-    `contexto_json` JSON,
-    `ip_cliente`    VARCHAR(45),
-    `fecha_evento`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `error_log` (
+    `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `endpoint`     VARCHAR(100),
+    `level`        ENUM('WARNING','ERROR','CRITICAL') NOT NULL DEFAULT 'ERROR',
+    `message`      TEXT NOT NULL,
+    `context_json` JSON,
+    `client_ip`    VARCHAR(45),
+    `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
+
+> ⚠️ **NOTA DEL AGENTE EJECUTOR (2026-04-17):** Las columnas de `bookings`, `customers`, `expedition_dates` y `paypal_transactions` son inferencias del Agente basadas en el schema anterior. El Arquitecto debe confirmar o corregir los nombres exactos de columnas con `DESCRIBE tablename` en producción y actualizar este Códex.
 
 ---
 
 ## 🧠 REGISTRO SEMÁNTICO (VOCABULARIO CONTROLADO)
 
-- ✅ **Términos Permitidos:**
-  `reserva`, `expedicion`, `fecha_expedicion`, `estatus_pago`, `cupo_disponible`, `orden_paypal`, `transaccion_paypal`, `capture_id`, `fecha_salida`, `cliente_nombre`, `cliente_email`, `cliente_telefono`, `num_lugares`, `total_pagado`, `log_errores`, `transacciones_paypal`
+- ✅ **Términos Permitidos (schema inglés — vigente desde 2026-04-17):**
+  `booking`, `expedition`, `expedition_date`, `payment_status`, `available_spots`, `paypal_order_id`, `paypal_transaction_id`, `capture_id`, `departure_date`, `name`, `email`, `phone`, `num_spots`, `total_amount`, `error_log`, `paypal_transactions`, `custom_fields`, `customer`
 
-- ❌ **Términos Prohibidos (y su reemplazo correcto):**
-  | Prohibido | Correcto |
+- ❌ **Términos Prohibidos (español — schema anterior deprecado):**
+  | Prohibido (deprecado) | Correcto (vigente) |
   | :--- | :--- |
-  | `booking` | `reserva` |
-  | `trip` / `tour` | `expedicion` |
-  | `status` | `estatus_pago` |
-  | `available` | `cupo_disponible` |
-  | `transaction` (variable) | `transaccion_paypal` |
-  | `slot` | `num_lugares` |
-  | `amount` | `total_pagado` |
-  | `user` / `usuario` | `cliente_nombre`, `cliente_email` |
-  | `payment_id` | `orden_paypal` o `transaccion_paypal` según la fase |
+  | `reserva` / `reservas` | `booking` / `bookings` |
+  | `expedicion` / `expediciones` | `expedition` / `expeditions` |
+  | `fecha_expedicion` | `expedition_date` / `expedition_dates` |
+  | `estatus_pago` | `payment_status` |
+  | `cupo_disponible` | `available_spots` |
+  | `orden_paypal` | `paypal_order_id` |
+  | `transaccion_paypal` | `paypal_transaction_id` |
+  | `fecha_salida` | `departure_date` |
+  | `cliente_nombre` / `cliente_email` / `cliente_telefono` | `customers.name` / `customers.email` / `customers.phone` |
+  | `num_lugares` | `num_spots` |
+  | `total_pagado` | `total_amount` |
+  | `log_errores` | `error_log` |
+  | `transacciones_paypal` | `paypal_transactions` |
+  | `activo` (TINYINT) | `status` ENUM('active','inactive') |
 
 ---
 

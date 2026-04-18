@@ -4,310 +4,316 @@ declare(strict_types=1);
 
 /**
  * test_crud.php — Validación de estructura de BD: Pegaso Expediciones
+ * Schema: INGLÉS (expeditions, expedition_dates, customers, bookings)
  *
- * Prueba la secuencia completa Create → Read → Update → Delete
- * usando SOLO Prepared Statements y el schema canónico del Codex.
+ * Fase 0: DESCRIBE de cada tabla para verificar columnas reales.
+ * Fases 1-4: Create → Read → Update → Delete.
+ * Limpia todos sus propios registros al finalizar.
  *
  * ⚠️  EJECUTAR ÚNICAMENTE EN ENTORNO LOCAL (APP_ENV=local).
- *     Este script BORRA sus propios registros al finalizar.
  */
 
 require_once __DIR__ . '/api/Database.php';
 
-// ── Helpers de salida ────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function ok(string $step): void
 {
-    echo "[ÉXITO] {$step}\n";
+    echo "\033[32m[ÉXITO]\033[0m {$step}\n";
 }
 
 function fail(string $step, string $reason): void
 {
-    echo "[FALLO] {$step} — {$reason}\n";
+    echo "\033[31m[FALLO]\033[0m {$step} — {$reason}\n";
 }
 
 function section(string $title): void
 {
-    echo "\n── {$title} " . str_repeat('─', max(0, 55 - strlen($title))) . "\n";
+    $line = str_repeat('─', max(0, 58 - strlen($title)));
+    echo "\n\033[1m── {$title} {$line}\033[0m\n";
 }
 
-// ── Guardia de entorno ───────────────────────────────────────────────────────
-
-$envFile = __DIR__ . '/.env';
-$envVars = [];
-if (is_readable($envFile)) {
-    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        $line = trim($line);
-        if ($line === '' || $line[0] === '#') continue;
-        [$k, $v] = array_pad(explode('=', $line, 2), 2, '');
-        $envVars[trim($k)] = trim($v, " \t\"'");
-    }
+function warn(string $msg): void
+{
+    echo "\033[33m[AVISO]\033[0m {$msg}\n";
 }
 
-if (($envVars['APP_ENV'] ?? '') !== 'local') {
-    die("[ABORTADO] Solo se ejecuta con APP_ENV=local. Entorno actual: " . ($envVars['APP_ENV'] ?? 'desconocido') . "\n");
+// ── Guardia de entorno ────────────────────────────────────────────────────────
+
+$envRaw = [];
+foreach (file(__DIR__ . '/.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+    $line = trim($line);
+    if ($line === '' || $line[0] === '#') continue;
+    [$k, $v] = array_pad(explode('=', $line, 2), 2, '');
+    $envRaw[trim($k)] = trim($v, " \t\"'");
 }
 
-// ── Conexión ─────────────────────────────────────────────────────────────────
+if (($envRaw['APP_ENV'] ?? '') !== 'local') {
+    die("\033[31m[ABORTADO]\033[0m Solo se ejecuta con APP_ENV=local.\n");
+}
+
+// ── Conexión ──────────────────────────────────────────────────────────────────
 
 section('CONEXIÓN');
 try {
     $db  = Database::getInstance();
     $pdo = $db->getConnection();
-    ok('Singleton Database instanciado');
-    ok('Conexión PDO establecida (utf8mb4, ERRMODE_EXCEPTION)');
+    ok('Singleton Database instanciado (utf8mb4, ERRMODE_EXCEPTION)');
 } catch (RuntimeException $e) {
     fail('Conexión', $e->getMessage());
     exit(1);
 }
 
-// ── IDs de registros de prueba (para limpiar al final) ───────────────────────
-
-$testIds = ['expedicion' => null, 'fecha' => null, 'reserva' => null, 'txn' => null];
-
 // ════════════════════════════════════════════════════════════════════════════
-// FASE CREATE
+// FASE 0: DESCRIBE — verifica que las tablas y columnas reales coinciden
 // ════════════════════════════════════════════════════════════════════════════
 
-section('CREATE');
+section('FASE 0 — DESCRIBE (verificación de schema real)');
 
-// 1. INSERT expedicion
-try {
-    $stmt = $pdo->prepare("
-        INSERT INTO `expediciones`
-            (`nombre`, `descripcion`, `precio`, `cupo_maximo`, `imagen_url`, `activo`)
-        VALUES
-            (:nombre, :descripcion, :precio, :cupo_maximo, :imagen_url, :activo)
-    ");
-    $stmt->execute([
-        ':nombre'      => '[TEST] Tiburón Ballena Test',
-        ':descripcion' => 'Registro de prueba — borrar automáticamente.',
-        ':precio'      => '1500.00',
-        ':cupo_maximo' => 10,
-        ':imagen_url'  => null,
-        ':activo'      => 0,   // inactivo para no aparecer en producción
-    ]);
-    $testIds['expedicion'] = (int) $pdo->lastInsertId();
-    ok("INSERT expediciones → id={$testIds['expedicion']}");
-} catch (PDOException $e) {
-    fail('INSERT expediciones', $e->getMessage());
-    exit(1);
+$tables = ['expeditions', 'expedition_dates', 'customers', 'bookings'];
+
+foreach ($tables as $table) {
+    try {
+        $rows = $pdo->query("DESCRIBE `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+        $cols = array_column($rows, 'Field');
+        ok("DESCRIBE {$table} → columnas: " . implode(', ', $cols));
+    } catch (PDOException $e) {
+        fail("DESCRIBE {$table}", $e->getMessage());
+        echo "       ↳ La tabla no existe o el usuario no tiene permisos. Abortando test.\n";
+        exit(1);
+    }
 }
 
-// 2. INSERT fecha_expedicion
-try {
-    $stmt = $pdo->prepare("
-        INSERT INTO `fechas_expedicion`
-            (`expedicion_id`, `fecha_salida`, `cupo_disponible`, `activo`)
-        VALUES
-            (:expedicion_id, :fecha_salida, :cupo_disponible, :activo)
-    ");
-    $stmt->execute([
-        ':expedicion_id'   => $testIds['expedicion'],
-        ':fecha_salida'    => date('Y-m-d', strtotime('+30 days')),
-        ':cupo_disponible' => 10,
-        ':activo'          => 0,
-    ]);
-    $testIds['fecha'] = (int) $pdo->lastInsertId();
-    ok("INSERT fechas_expedicion → id={$testIds['fecha']}");
-} catch (PDOException $e) {
-    fail('INSERT fechas_expedicion', $e->getMessage());
-    exit(1);
-}
+// ── IDs para limpiar al final ─────────────────────────────────────────────────
+$ids = ['expedition' => null, 'date' => null, 'customer' => null, 'booking' => null];
 
-// 3. INSERT reserva (cliente de prueba + JSON test vía transaccion_paypal)
-try {
-    $stmt = $pdo->prepare("
-        INSERT INTO `reservas`
-            (`expedicion_id`, `fecha_expedicion_id`,
-             `cliente_nombre`, `cliente_email`, `cliente_telefono`,
-             `num_lugares`, `total_pagado`, `estatus_pago`,
-             `orden_paypal`, `ip_cliente`)
-        VALUES
-            (:expedicion_id, :fecha_expedicion_id,
-             :cliente_nombre, :cliente_email, :cliente_telefono,
-             :num_lugares, :total_pagado, :estatus_pago,
-             :orden_paypal, :ip_cliente)
-    ");
-    $stmt->execute([
-        ':expedicion_id'       => $testIds['expedicion'],
-        ':fecha_expedicion_id' => $testIds['fecha'],
-        ':cliente_nombre'      => 'Cliente Test Pegaso',
-        ':cliente_email'       => 'test@pegasoexpediciones.com',
-        ':cliente_telefono'    => '6121234567',
-        ':num_lugares'         => 2,
-        ':total_pagado'        => '3000.00',
-        ':estatus_pago'        => 'pendiente',
-        ':orden_paypal'        => 'TEST-ORDER-' . time(),
-        ':ip_cliente'          => '127.0.0.1',
-    ]);
-    $testIds['reserva'] = (int) $pdo->lastInsertId();
-    ok("INSERT reservas (cliente) → id={$testIds['reserva']}");
-} catch (PDOException $e) {
-    fail('INSERT reservas', $e->getMessage());
-    exit(1);
-}
+// ════════════════════════════════════════════════════════════════════════════
+// FASE 1: CREATE
+// ════════════════════════════════════════════════════════════════════════════
 
-// 4. INSERT transacciones_paypal con JSON (test de columna tipo JSON)
+section('FASE 1 — CREATE');
+
+// 1-A. INSERT expedition (con JSON en custom_fields)
 try {
-    $payloadJson = json_encode([
-        'event'    => 'TEST_ORDER_CREATED',
-        'order_id' => 'TEST-ORDER-' . time(),
-        'amount'   => ['value' => '3000.00', 'currency_code' => 'MXN'],
-        'status'   => 'CREATED',
+    $customFields = json_encode([
+        'difficulty'    => 'medium',
+        'includes'      => ['guide', 'equipment', 'snacks'],
+        'meeting_point' => 'Puerto de La Paz, Muelle 3',
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
     $stmt = $pdo->prepare("
-        INSERT INTO `transacciones_paypal`
-            (`reserva_id`, `orden_paypal`, `capture_id`, `fase`, `respuesta_json`)
+        INSERT INTO `expeditions`
+            (`name`, `description`, `price`, `max_capacity`, `image_url`, `status`, `custom_fields`)
         VALUES
-            (:reserva_id, :orden_paypal, :capture_id, :fase, :respuesta_json)
+            (:name, :description, :price, :max_capacity, :image_url, :status, :custom_fields)
     ");
     $stmt->execute([
-        ':reserva_id'     => $testIds['reserva'],
-        ':orden_paypal'   => 'TEST-ORDER-' . time(),
-        ':capture_id'     => null,
-        ':fase'           => 'orden_creada',
-        ':respuesta_json' => $payloadJson,
+        ':name'          => '[TEST] Whale Shark Expedition',
+        ':description'   => 'Test record — auto-deleted.',
+        ':price'         => '150.00',
+        ':max_capacity'  => 8,
+        ':image_url'     => null,
+        ':status'        => 'inactive',   // inactivo para no aparecer en el frontend
+        ':custom_fields' => $customFields,
     ]);
-    $testIds['txn'] = (int) $pdo->lastInsertId();
-    ok("INSERT transacciones_paypal (JSON) → id={$testIds['txn']}");
+    $ids['expedition'] = (int) $pdo->lastInsertId();
+    ok("INSERT expeditions → id={$ids['expedition']}, custom_fields JSON insertado");
 } catch (PDOException $e) {
-    fail('INSERT transacciones_paypal', $e->getMessage());
+    fail('INSERT expeditions', $e->getMessage());
+    exit(1);
+}
+
+// 1-B. INSERT expedition_date
+try {
+    $stmt = $pdo->prepare("
+        INSERT INTO `expedition_dates`
+            (`expedition_id`, `departure_date`, `available_spots`, `status`)
+        VALUES
+            (:expedition_id, :departure_date, :available_spots, :status)
+    ");
+    $stmt->execute([
+        ':expedition_id'  => $ids['expedition'],
+        ':departure_date' => date('Y-m-d', strtotime('+30 days')),
+        ':available_spots' => 8,
+        ':status'         => 'inactive',
+    ]);
+    $ids['date'] = (int) $pdo->lastInsertId();
+    ok("INSERT expedition_dates → id={$ids['date']}");
+} catch (PDOException $e) {
+    fail('INSERT expedition_dates', $e->getMessage());
+    exit(1);
+}
+
+// 1-C. INSERT customer
+try {
+    $stmt = $pdo->prepare("
+        INSERT INTO `customers` (`name`, `email`, `phone`)
+        VALUES (:name, :email, :phone)
+    ");
+    $stmt->execute([
+        ':name'  => 'Test Customer Pegaso',
+        ':email' => 'test-' . time() . '@pegasoexpediciones.com',
+        ':phone' => '6121234567',
+    ]);
+    $ids['customer'] = (int) $pdo->lastInsertId();
+    ok("INSERT customers → id={$ids['customer']}");
+} catch (PDOException $e) {
+    fail('INSERT customers', $e->getMessage());
+    exit(1);
+}
+
+// 1-D. INSERT booking
+try {
+    $stmt = $pdo->prepare("
+        INSERT INTO `bookings`
+            (`expedition_id`, `expedition_date_id`, `customer_id`,
+             `num_spots`, `total_amount`, `payment_status`,
+             `paypal_order_id`, `client_ip`)
+        VALUES
+            (:expedition_id, :expedition_date_id, :customer_id,
+             :num_spots, :total_amount, :payment_status,
+             :paypal_order_id, :client_ip)
+    ");
+    $stmt->execute([
+        ':expedition_id'      => $ids['expedition'],
+        ':expedition_date_id' => $ids['date'],
+        ':customer_id'        => $ids['customer'],
+        ':num_spots'          => 2,
+        ':total_amount'       => '300.00',
+        ':payment_status'     => 'pending',
+        ':paypal_order_id'    => 'TEST-ORDER-' . time(),
+        ':client_ip'          => '127.0.0.1',
+    ]);
+    $ids['booking'] = (int) $pdo->lastInsertId();
+    ok("INSERT bookings → id={$ids['booking']}");
+} catch (PDOException $e) {
+    fail('INSERT bookings', $e->getMessage());
     exit(1);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FASE READ
+// FASE 2: READ + json_decode
 // ════════════════════════════════════════════════════════════════════════════
 
-section('READ');
+section('FASE 2 — READ');
 
-// 5. SELECT expedicion con JOIN a fechas
+// 2-A. SELECT expedition + JOIN expedition_dates
 try {
     $stmt = $pdo->prepare("
-        SELECT e.id, e.nombre, e.precio, e.cupo_maximo,
-               f.id AS fecha_id, f.fecha_salida, f.cupo_disponible
-        FROM   `expediciones`      AS e
-        JOIN   `fechas_expedicion` AS f ON f.expedicion_id = e.id
+        SELECT e.id, e.name, e.price, e.status, e.custom_fields,
+               ed.id AS date_id, ed.departure_date, ed.available_spots
+        FROM   `expeditions`      AS e
+        JOIN   `expedition_dates` AS ed ON ed.expedition_id = e.id
         WHERE  e.id = :id
         LIMIT  1
     ");
-    $stmt->execute([':id' => $testIds['expedicion']]);
+    $stmt->execute([':id' => $ids['expedition']]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$row || (int) $row['id'] !== $testIds['expedicion']) {
-        throw new RuntimeException('Registro no encontrado o id no coincide.');
-    }
-    ok("SELECT expedicion+fecha → nombre: \"{$row['nombre']}\", precio: {$row['precio']}");
-} catch (Throwable $e) {
-    fail('SELECT expedicion', $e->getMessage());
-}
+    if (!$row) throw new RuntimeException('Registro no encontrado.');
 
-// 6. SELECT transaccion + decode JSON
-try {
-    $stmt = $pdo->prepare("
-        SELECT `respuesta_json`
-        FROM   `transacciones_paypal`
-        WHERE  `id` = :id
-    ");
-    $stmt->execute([':id' => $testIds['txn']]);
-    $txn = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $decoded = json_decode((string) $txn['respuesta_json'], true);
-
+    $cf = json_decode((string) $row['custom_fields'], true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        throw new RuntimeException('json_decode falló: ' . json_last_error_msg());
+        throw new RuntimeException('json_decode de custom_fields falló: ' . json_last_error_msg());
     }
-    if (($decoded['event'] ?? '') !== 'TEST_ORDER_CREATED') {
-        throw new RuntimeException('Campo "event" del JSON no coincide.');
-    }
-    ok("SELECT+json_decode transacciones_paypal → event: \"{$decoded['event']}\", amount: {$decoded['amount']['value']} {$decoded['amount']['currency_code']}");
+
+    ok("SELECT expedition+date → name: \"{$row['name']}\", departure: {$row['departure_date']}");
+    ok("json_decode custom_fields → difficulty: \"{$cf['difficulty']}\", includes: " . implode(', ', $cf['includes']));
 } catch (Throwable $e) {
-    fail('SELECT+json_decode transacciones_paypal', $e->getMessage());
+    fail('SELECT expeditions + json_decode', $e->getMessage());
+}
+
+// 2-B. SELECT booking + customer (JOIN)
+try {
+    $stmt = $pdo->prepare("
+        SELECT b.id, b.num_spots, b.total_amount, b.payment_status,
+               c.name AS customer_name, c.email
+        FROM   `bookings`  AS b
+        JOIN   `customers` AS c ON c.id = b.customer_id
+        WHERE  b.id = :id
+    ");
+    $stmt->execute([':id' => $ids['booking']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row) throw new RuntimeException('Booking no encontrado.');
+    ok("SELECT bookings+customers → customer: \"{$row['customer_name']}\", spots: {$row['num_spots']}, amount: {$row['total_amount']}");
+} catch (Throwable $e) {
+    fail('SELECT bookings+customers', $e->getMessage());
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FASE UPDATE
+// FASE 3: UPDATE
 // ════════════════════════════════════════════════════════════════════════════
 
-section('UPDATE');
+section('FASE 3 — UPDATE');
 
-// 7. Decrementar cupo_disponible (simula reserva confirmada)
+// 3-A. Decrementar available_spots (decremento atómico con guard)
 try {
     $stmt = $pdo->prepare("
-        UPDATE `fechas_expedicion`
-        SET    `cupo_disponible` = `cupo_disponible` - :lugares
+        UPDATE `expedition_dates`
+        SET    `available_spots` = `available_spots` - :spots
         WHERE  `id`              = :id
-          AND  `cupo_disponible` >= :lugares
+          AND  `available_spots` >= :spots
     ");
-    $stmt->execute([':lugares' => 2, ':id' => $testIds['fecha']]);
+    $stmt->execute([':spots' => 2, ':id' => $ids['date']]);
 
-    if ($stmt->rowCount() === 0) {
-        throw new RuntimeException('0 filas afectadas. ¿Cupo insuficiente?');
-    }
+    if ($stmt->rowCount() === 0) throw new RuntimeException('0 filas afectadas — cupo insuficiente.');
 
-    $check = $pdo->prepare("SELECT cupo_disponible FROM fechas_expedicion WHERE id = :id");
-    $check->execute([':id' => $testIds['fecha']]);
-    $nuevo = (int) $check->fetchColumn();
-
-    ok("UPDATE cupo_disponible → valor actual: {$nuevo} (era 10, restamos 2)");
+    $check = $pdo->prepare("SELECT available_spots FROM expedition_dates WHERE id = :id");
+    $check->execute([':id' => $ids['date']]);
+    ok("UPDATE available_spots → nuevo valor: " . $check->fetchColumn() . " (era 8, restamos 2)");
 } catch (Throwable $e) {
-    fail('UPDATE fechas_expedicion.cupo_disponible', $e->getMessage());
+    fail('UPDATE expedition_dates.available_spots', $e->getMessage());
 }
 
-// 8. Actualizar estatus_pago de reserva
+// 3-B. Actualizar payment_status (transición pendiente → completed)
 try {
     $stmt = $pdo->prepare("
-        UPDATE `reservas`
-        SET    `estatus_pago` = :nuevo_estatus
-        WHERE  `id`           = :id
-          AND  `estatus_pago` = 'pendiente'
+        UPDATE `bookings`
+        SET    `payment_status` = 'completed'
+        WHERE  `id`             = :id
+          AND  `payment_status` = 'pending'
     ");
-    $stmt->execute([':nuevo_estatus' => 'completado', ':id' => $testIds['reserva']]);
+    $stmt->execute([':id' => $ids['booking']]);
 
-    if ($stmt->rowCount() === 0) {
-        throw new RuntimeException('0 filas afectadas. Estado no era "pendiente".');
-    }
-    ok('UPDATE reservas.estatus_pago → pendiente → completado');
+    if ($stmt->rowCount() === 0) throw new RuntimeException('0 filas — el estado no era "pending".');
+    ok("UPDATE bookings.payment_status → pending → completed");
 } catch (Throwable $e) {
-    fail('UPDATE reservas.estatus_pago', $e->getMessage());
+    fail('UPDATE bookings.payment_status', $e->getMessage());
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FASE DELETE (limpieza en orden inverso a las FK)
+// FASE 4: DELETE (orden inverso a FK)
 // ════════════════════════════════════════════════════════════════════════════
 
-section('DELETE + LIMPIEZA');
+section('FASE 4 — DELETE + LIMPIEZA');
 
 $deleteOk = true;
 
 foreach ([
-    ['transacciones_paypal', 'txn'],
-    ['reservas',             'reserva'],
-    ['fechas_expedicion',    'fecha'],
-    ['expediciones',         'expedicion'],
-] as [$tabla, $key]) {
-    if ($testIds[$key] === null) continue;
+    ['bookings',          'booking'],
+    ['expedition_dates',  'date'],
+    ['customers',         'customer'],
+    ['expeditions',       'expedition'],
+] as [$table, $key]) {
+    if ($ids[$key] === null) continue;
     try {
-        $stmt = $pdo->prepare("DELETE FROM `{$tabla}` WHERE `id` = :id");
-        $stmt->execute([':id' => $testIds[$key]]);
-        ok("DELETE {$tabla} id={$testIds[$key]}");
+        $stmt = $pdo->prepare("DELETE FROM `{$table}` WHERE `id` = :id");
+        $stmt->execute([':id' => $ids[$key]]);
+        ok("DELETE {$table} id={$ids[$key]}");
     } catch (PDOException $e) {
-        fail("DELETE {$tabla}", $e->getMessage());
+        fail("DELETE {$table}", $e->getMessage());
         $deleteOk = false;
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// RESUMEN FINAL
-// ════════════════════════════════════════════════════════════════════════════
+// ── Resumen ───────────────────────────────────────────────────────────────────
 
 section('RESUMEN');
 if ($deleteOk) {
-    echo "\n✅  BD limpia — todos los registros de prueba eliminados.\n";
-    echo "✅  Schema validado. La BD está lista para registro en el Codex.\n\n";
+    echo "\n\033[32m✅  BD limpia — todos los registros de prueba eliminados.\033[0m\n";
+    echo "\033[32m✅  Schema inglés validado. Listo para registro definitivo en el Códex.\033[0m\n\n";
 } else {
-    echo "\n⚠️  Algunos registros de prueba pueden haber quedado en la BD.\n";
-    echo "    Verifica las tablas manualmente antes de registrar en el Codex.\n\n";
+    echo "\n\033[33m⚠️   Algunos registros de prueba pueden haber quedado en la BD.\033[0m\n";
+    echo "    Verifica manualmente antes de actualizar el Códex.\n\n";
 }
