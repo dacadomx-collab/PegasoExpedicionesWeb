@@ -276,3 +276,103 @@ CREATE TABLE `log_errores` (
 3. fechas_expedicion
 4. expediciones
 ```
+
+---
+
+## 🖥️ INFRAESTRUCTURA FRONTEND (NEXT.JS) — REGISTRO v2 (2026-04-17)
+
+> Estado: **AUDITADO** — motor generado por v0.app, revisado y corregido por Agente Ejecutor.
+
+### Stack de UI Confirmado
+
+| Tecnología | Versión | Rol |
+| :--- | :--- | :--- |
+| Next.js | 16.2.0 | Framework (App Router, Static Export `output:'export'`) |
+| React | 19.2.4 | Runtime |
+| TypeScript | 5.7.3 | Tipado estricto (`strict: true`) |
+| Tailwind CSS | v4.2.0 | Estilos (sintaxis nueva: `@import 'tailwindcss'`) |
+| shadcn/ui | new-york | Componentes base (Radix UI) |
+| Radix UI | 1.x–2.x | Primitivas accesibles (45 componentes instalados) |
+| date-fns | 4.1.0 | Utilidades de fecha (locale `es`) |
+| react-hook-form | 7.54.x | Formularios (instalado, pendiente de integrar) |
+| zod | 3.24.x | Validación de schemas (instalado, pendiente de integrar) |
+| lucide-react | 0.564.0 | Iconografía |
+| next-themes | — | Sistema Dark/Light mode |
+
+### Paleta de Color Canónica (booking-engine)
+
+| Token | Valor | Uso |
+| :--- | :--- | :--- |
+| `--color-cream` | `#fcfaf5` | Fondo principal |
+| `--color-coral` | `#f26d52` | Acción primaria (CTAs, toggles activos) |
+| `--color-dark` | `#0f0200` | Texto principal |
+| `--color-muted` | `#4c4c4c` | Texto secundario |
+
+**Tipografía:** `Playfair Display` (serif, títulos) + `DM Sans` (sans, cuerpo).
+
+### Estructura de Rutas (App Router)
+
+| Ruta | Archivo | Descripción |
+| :--- | :--- | :--- |
+| `/` | `app/page.tsx` | Shell principal; renderiza `widget` o `dashboard` según estado |
+| Layout raíz | `app/layout.tsx` | Fuentes, `lang="es"`, Vercel Analytics (solo prod) |
+| Estilos globales | `app/globals.css` | Variables CSS oklch, Tailwind v4 |
+
+### Componentes Clave Registrados
+
+| Componente | Archivo | Tipo | Variables que consume | Estado |
+| :--- | :--- | :--- | :--- | :--- |
+| `Home` | `app/page.tsx` | Page (Client) | `View` type | ✅ Corregido |
+| `ViewToggle` | `app/page.tsx` | Sub-component | `view: View`, `onViewChange`, `variant` | ✅ Nuevo |
+| `BookingWidget` | `components/booking-widget.tsx` | Client Component | `tours[]`, `date`, `adults`, `children` | ⚠️ Datos hardcoded |
+| `AdminDashboard` | `components/admin-dashboard.tsx` | Client Component | `Reservation[]`, `ReservationStatus` | ⚠️ Datos hardcoded |
+| `ThemeProvider` | `components/theme-provider.tsx` | Provider | `ThemeProviderProps` | ✅ OK |
+
+### Types Canónicos del Frontend (booking-engine)
+
+```typescript
+// app/page.tsx
+type View = "widget" | "dashboard"
+
+// components/admin-dashboard.tsx
+type ReservationStatus = "pagado" | "interesado" | "cancelado"
+interface Reservation {
+  id: number; client: string; phone: string; email: string
+  tour: string; date: string; status: ReservationStatus
+  amount: number; guests: number
+}
+
+// components/booking-widget.tsx  (pendiente formalizar)
+interface Tour {
+  id: number; name: string; price: number; childPrice: number
+  minAge: number; duration: string; requirements: string[]
+}
+```
+
+### Hooks Registrados
+
+| Hook | Archivo | Qué hace |
+| :--- | :--- | :--- |
+| `useIsMobile()` | `hooks/use-mobile.ts` | Retorna `boolean` (breakpoint 768px via `matchMedia`) |
+| `useToast()` | `hooks/use-toast.ts` | Toast con reducer. `TOAST_LIMIT=1`. No usa React Context. |
+
+### Reglas de Integración con Backend PHP
+
+> Estas reglas aplican cuando se conecten los endpoints definidos en `03_CONTRATOS_API_Y_LOGICA.md`.
+
+1. **URL de API:** Usar variable de entorno `NEXT_PUBLIC_API_URL`. **PROHIBIDO** hardcodear la URL del servidor PHP.
+2. **`NEXT_PUBLIC_` scope:** Solo variables no-secretas (URL base de API). Nunca credenciales.
+3. **Fallback obligatorio:** Todo `fetch()` a PHP debe tener un bloque `try/catch` con estado de error visible en UI.
+4. **Total monetario:** El campo `totalPagado` viene del backend. El frontend NO calcula el precio final para PayPal.
+5. **Static Export:** `output: 'export'` está activado. **PROHIBIDO** usar API Routes de Next.js (`app/api/`). Toda la lógica de servidor va en PHP.
+
+### Advertencias de Deuda Técnica (Auditadas 2026-04-17)
+
+| ID | Componente | Problema | Prioridad |
+| :--- | :--- | :--- | :--- |
+| DT-01 | `booking-widget.tsx` | `tours[]` hardcodeado — debe venir del endpoint `GET /api/expediciones` | Alta |
+| DT-02 | `admin-dashboard.tsx` | `reservations[]` hardcodeado — debe venir de `GET /api/reservas` | Alta |
+| DT-03 | `booking-widget.tsx` | Parámetro `date` en `disabled={(date) => ...}` oculta el estado `date` del componente | Media |
+| DT-04 | `booking-widget.tsx` | Sin validación Zod en el formulario (zod instalado pero sin usar) | Media |
+| DT-05 | `admin-dashboard.tsx` | `handleWhatsApp` usa `replace(/\s/g,'')` — no elimina `+` ni `-` del número | Baja |
+| DT-06 | `booking-widget.tsx` | Interfaz `Tour` no formalizada (inferida de array) | Baja |

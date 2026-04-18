@@ -5,8 +5,61 @@ import { BookingWidget } from "@/components/booking-widget"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { MapPin } from "lucide-react"
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type View = "widget" | "dashboard"
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+/**
+ * ViewToggle — extracted to break TypeScript control-flow narrowing.
+ *
+ * Root cause of TS2367: inside a `view === "widget" ? (...) : (...)` branch,
+ * the compiler narrows `view` to the literal that matches, making comparisons
+ * against the other literal impossible ("no overlap"). Moving the comparisons
+ * here — where `view` arrives as the full union type — eliminates the error.
+ */
+interface ViewToggleProps {
+  view: View
+  onViewChange: (next: View) => void
+  variant?: "header" | "floating"
+}
+
+const VIEW_LABELS: Record<View, string> = {
+  widget: "Widget",
+  dashboard: "Dashboard",
+}
+
+function ViewToggle({ view, onViewChange, variant = "header" }: ViewToggleProps) {
+  const isFloating = variant === "floating"
+  const views: View[] = ["widget", "dashboard"]
+
+  return (
+    <div className={`flex items-center gap-2 ${isFloating ? "p-0" : ""}`}>
+      {views.map((v) => (
+        <button
+          key={v}
+          onClick={() => onViewChange(v)}
+          aria-pressed={view === v}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            isFloating ? "rounded-md" : "rounded-lg"
+          } ${
+            view === v
+              ? "bg-[#f26d52] text-white"
+              : "text-[#4c4c4c] hover:bg-gray-100"
+          }`}
+        >
+          {VIEW_LABELS[v]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function Home() {
-  const [view, setView] = useState<"widget" | "dashboard">("widget")
+  const [view, setView] = useState<View>("widget")
 
   return (
     <div className="min-h-screen">
@@ -25,28 +78,8 @@ export default function Home() {
                     <p className="text-xs text-[#4c4c4c]">Expediciones</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setView("widget")}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      view === "widget"
-                        ? "bg-[#f26d52] text-white"
-                        : "text-[#4c4c4c] hover:bg-gray-100"
-                    }`}
-                  >
-                    Widget
-                  </button>
-                  <button
-                    onClick={() => setView("dashboard")}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      view === "dashboard"
-                        ? "bg-[#f26d52] text-white"
-                        : "text-[#4c4c4c] hover:bg-gray-100"
-                    }`}
-                  >
-                    Dashboard
-                  </button>
-                </div>
+                {/* Comparisons inside ViewToggle — view prop is View (not narrowed) */}
+                <ViewToggle view={view} onViewChange={setView} variant="header" />
               </div>
             </div>
           </header>
@@ -59,7 +92,7 @@ export default function Home() {
                   Explora la Patagonia
                 </h2>
                 <p className="text-[#4c4c4c] max-w-xl mx-auto">
-                  Descubre experiencias unicas en los paisajes mas impresionantes del sur de Argentina
+                  Descubre experiencias únicas en los paisajes más impresionantes del sur de Argentina
                 </p>
               </div>
               <BookingWidget />
@@ -69,34 +102,15 @@ export default function Home() {
           {/* Footer */}
           <footer className="border-t border-gray-200 bg-white py-6">
             <div className="max-w-7xl mx-auto px-4 text-center text-sm text-[#4c4c4c]">
-              <p>Pegaso Expediciones - Sistema Operativo Turistico</p>
+              <p>Pegaso Expediciones — Sistema Operativo Turístico</p>
             </div>
           </footer>
         </div>
       ) : (
         <div className="relative">
-          {/* View Switcher Floating */}
-          <div className="fixed top-4 right-4 z-[60] flex items-center gap-2 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
-            <button
-              onClick={() => setView("widget")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                view === "widget"
-                  ? "bg-[#f26d52] text-white"
-                  : "text-[#4c4c4c] hover:bg-gray-100"
-              }`}
-            >
-              Widget
-            </button>
-            <button
-              onClick={() => setView("dashboard")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                view === "dashboard"
-                  ? "bg-[#f26d52] text-white"
-                  : "text-[#4c4c4c] hover:bg-gray-100"
-              }`}
-            >
-              Dashboard
-            </button>
+          {/* Floating switcher — same component, no narrowing issues */}
+          <div className="fixed top-4 right-4 z-[60] bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+            <ViewToggle view={view} onViewChange={setView} variant="floating" />
           </div>
           <AdminDashboard />
         </div>
