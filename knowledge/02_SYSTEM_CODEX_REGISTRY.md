@@ -80,129 +80,91 @@
 ## 🗄️ SQL SCHEMA CANÓNICO (FUENTE DE VERDAD)
 
 > ⚠️ **MANDAMIENTO #9:** Ninguna IA puede alterar este schema sin autorización humana explícita.
-> ✅ **2026-04-17:** Schema migrado a inglés — Escenario A confirmado por humano. Tablas físicas en servidor en inglés.
+> ✅ 📊 MAPEO DE VARIABLES VALIDADAS (FRONT VS BACK)'en inglés.
 
-```sql
--- ============================================================
--- PROYECTO: PEGASO EXPEDICIONES - Sistema de Reservas v2
--- CHARSET: utf8mb4 | ENGINE: InnoDB
--- SCHEMA: INGLÉS (confirmado 2026-04-17)
--- ============================================================
+## 📊 MAPEO DE VARIABLES VALIDADAS (FRONT VS BACK) — VERSIÓN INGLÉS (2026-04-21)
 
-CREATE TABLE `expeditions` (
-    `id`            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-    `name`          VARCHAR(255)    NOT NULL,
-    `description`   TEXT,
-    `price`         DECIMAL(10,2)   NOT NULL,
-    `max_capacity`  INT UNSIGNED    NOT NULL,
-    `image_url`     VARCHAR(500),
-    `status`        ENUM('active','inactive') NOT NULL DEFAULT 'active',
-    `custom_fields` JSON,
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### Módulo: `expeditions` (Expediciones)
+| Concepto | DB / Backend (`snake_case`) | Frontend (`camelCase`) | Tipo de Dato | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID de expedición (PK) | `id` | `id` | INT UNSIGNED | > 0, auto_increment |
+| Nombre | `name` | `name` | VARCHAR(255) | no vacío |
+| Descripción | `description` | `description` | TEXT | nullable |
+| Precio (Adulto) | `price` | `price` | DECIMAL(10,2) | > 0.00, canónico en backend |
+| **Cupo diario** | **`daily_capacity`** | **`dailyCapacity`** | **INT UNSIGNED** | **> 0. Reemplaza `max_capacity` (2026-04-23). El backend cuenta bookings activos para esa fecha y compara contra este valor.** |
+| Imagen de portada | `image_url` | `imageUrl` | VARCHAR(500) | URL válida |
+| Visibilidad | `status` | `status` | ENUM | 'active', 'inactive' |
 
+> **Campo virtual en respuesta JSON:** `get_expediciones.php` adjunta `blocked_dates[]` a cada expedición (ver módulo `blocked_dates` abajo). No es columna de `expeditions`.
 
-CREATE TABLE `expedition_dates` (
-    `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `expedition_id`    INT UNSIGNED NOT NULL,
-    `departure_date`   DATE         NOT NULL,
-    `available_spots`  INT UNSIGNED NOT NULL,
-    `status`           ENUM('active','inactive') NOT NULL DEFAULT 'active',
-    PRIMARY KEY (`id`),
-    CONSTRAINT `fk_expedition_dates_expedition`
-        FOREIGN KEY (`expedition_id`) REFERENCES `expeditions`(`id`) ON DELETE CASCADE,
-    INDEX `idx_expedition_status` (`expedition_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### ~~Módulo: `expedition_dates`~~ — ⛔ DEPRECADO (2026-04-23)
+> **Mutación: Disponibilidad Dinámica.** La tabla `expedition_dates` fue eliminada del schema activo. `departure_date` y `departure_time` migraron a la tabla `bookings`. Los campos `available_spots` desaparecen; el cupo se calcula en tiempo real contando bookings activos contra `expeditions.daily_capacity`. El frontend usa un `<Calendar />` libre bloqueado solo por `blocked_dates` y fechas pasadas.
+>
+> **Términos prohibidos derivados de esta tabla:** `expedition_date_id`, `available_spots`, `expedition_dates`.
 
+### Módulo: `blocked_dates` (Fechas Bloqueadas) — NUEVO 2026-04-23
+| Concepto | DB / Backend (`snake_case`) | Frontend (`camelCase`) | Tipo de Dato | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID (PK) | `id` | ❌ NO EXPONER | INT UNSIGNED | auto_increment |
+| FK expedición | `expedition_id` | ❌ NO EXPONER | INT UNSIGNED | FK → `expeditions.id` ON DELETE CASCADE |
+| Fecha bloqueada | `blocked_date` | `date` | DATE | El backend bloquea días completos (sin cupo, clima, mantenimiento) |
+| Motivo | `reason` | `reason` | VARCHAR(255) | nullable — visible opcionalmente en UI |
 
-CREATE TABLE `customers` (
-    `id`    INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `name`  VARCHAR(255) NOT NULL,
-    `email` VARCHAR(255) NOT NULL,
-    `phone` VARCHAR(20)  NOT NULL,
-    PRIMARY KEY (`id`),
-    INDEX `idx_customer_email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+> **Regla:** `get_expediciones.php` adjunta el array `blocked_dates` en cada objeto expedición. El frontend los mapea al prop `disabled` del `<Calendar />`. El backend también valida en `crear_orden_paypal.php` que `departure_date` no esté en `blocked_dates` (doble blindaje).
 
+### Módulo: `customers` (Clientes)
+| Concepto | DB / Backend (`snake_case`) | Frontend (`camelCase`) | Tipo de Dato | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID Cliente (PK) | `id` | `customerId` | INT UNSIGNED | auto_increment |
+| Nombre completo | `name` | `name` | VARCHAR(255) | no vacío |
+| Correo | `email` | `email` | VARCHAR(255) | FILTER_VALIDATE_EMAIL |
+| Teléfono | `phone` | `phone` | VARCHAR(20) | solo numérico/símbolos válidos |
 
-CREATE TABLE `bookings` (
-    `id`                     INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `expedition_id`          INT UNSIGNED  NOT NULL,
-    `expedition_date_id`     INT UNSIGNED  NOT NULL,
-    `customer_id`            INT UNSIGNED  NOT NULL,
-    `num_spots`              TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    `total_amount`           DECIMAL(10,2) NOT NULL,
-    `payment_status`         ENUM('pending','completed','failed','refunded')
-                             NOT NULL DEFAULT 'pending',
-    `paypal_order_id`        VARCHAR(100)  NOT NULL UNIQUE,
-    `paypal_transaction_id`  VARCHAR(100)  UNIQUE,
-    `created_at`             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `client_ip`              VARCHAR(45),
-    PRIMARY KEY (`id`),
-    CONSTRAINT `fk_bookings_expedition`
-        FOREIGN KEY (`expedition_id`) REFERENCES `expeditions`(`id`),
-    CONSTRAINT `fk_bookings_date`
-        FOREIGN KEY (`expedition_date_id`) REFERENCES `expedition_dates`(`id`),
-    CONSTRAINT `fk_bookings_customer`
-        FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`),
-    INDEX `idx_paypal_order` (`paypal_order_id`),
-    INDEX `idx_payment_status` (`payment_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### Módulo: `bookings` (Reservas) — ACTUALIZADO 2026-04-23
+| Concepto | DB / Backend (`snake_case`) | Frontend (`camelCase`) | Tipo de Dato | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID Reserva (PK) | `id` | `id` | INT UNSIGNED | auto_increment |
+| FK expedición | `expedition_id` | `expeditionId` | INT UNSIGNED | FK → `expeditions.id` |
+| ~~FK fecha~~ | ~~`expedition_date_id`~~ | ~~deprecado~~ | ~~FK~~ | **ELIMINADO — migración Disponibilidad Dinámica** |
+| FK cliente | `customer_id` | `customerId` | INT UNSIGNED | FK → `customers.id` |
+| **Fecha de salida** | **`departure_date`** | **`departureDate`** | **DATE** | **Elegida libremente por el usuario en Calendar. >= CURDATE(). No debe estar en `blocked_dates`.** |
+| **Horario de salida** | **`departure_time`** | **`departureTime`** | **TIME** | **nullable — asignado por el Arquitecto/admin post-reserva o fijo por expedición.** |
+| Lugares comprados | `num_spots` | `numSpots` | TINYINT UNSIGNED | >= 1 y <= `daily_capacity` disponible para esa fecha |
+| Monto total | `total_amount` | `totalAmount` | DECIMAL(10,2) | Calculado SOLO en backend: `price × num_spots` |
+| Estado de pago | `payment_status` | `paymentStatus` | ENUM | 'pending','completed','failed','refunded' |
+| Order ID PayPal | `paypal_order_id` | `paypalOrderId` | VARCHAR(100) | UNIQUE |
+| Capture ID PayPal | `paypal_transaction_id`| `paypalTransactionId`| VARCHAR(100) | UNIQUE, nullable hasta Fase 2 |
+| Fecha de creación | `created_at` | `createdAt` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
 
-
-CREATE TABLE `paypal_transactions` (
-    `id`             INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `booking_id`     INT UNSIGNED,
-    `paypal_order_id` VARCHAR(100) NOT NULL,
-    `capture_id`     VARCHAR(100),
-    `phase`          ENUM('order_created','capture_success','capture_failed') NOT NULL,
-    `response_json`  JSON,
-    `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    CONSTRAINT `fk_txn_booking`
-        FOREIGN KEY (`booking_id`) REFERENCES `bookings`(`id`) ON DELETE SET NULL,
-    INDEX `idx_order_txn` (`paypal_order_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
-CREATE TABLE `error_log` (
-    `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `endpoint`     VARCHAR(100),
-    `level`        ENUM('WARNING','ERROR','CRITICAL') NOT NULL DEFAULT 'ERROR',
-    `message`      TEXT NOT NULL,
-    `context_json` JSON,
-    `client_ip`    VARCHAR(45),
-    `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-```
-
-> ⚠️ **NOTA DEL AGENTE EJECUTOR (2026-04-17):** Las columnas de `bookings`, `customers`, `expedition_dates` y `paypal_transactions` son inferencias del Agente basadas en el schema anterior. El Arquitecto debe confirmar o corregir los nombres exactos de columnas con `DESCRIBE tablename` en producción y actualizar este Códex.
+> **Regla de cupo dinámico (2026-04-23):** El backend valida que `(SELECT COUNT(*) FROM bookings WHERE expedition_id = X AND departure_date = Y AND payment_status != 'failed') + num_spots <= daily_capacity`. Esta consulta usa `SELECT ... FOR UPDATE` para evitar race conditions (anti-doble reserva).
 
 ---
 
 ## 🧠 REGISTRO SEMÁNTICO (VOCABULARIO CONTROLADO)
 
-- ✅ **Términos Permitidos (schema inglés — vigente desde 2026-04-17):**
-  `booking`, `expedition`, `expedition_date`, `payment_status`, `available_spots`, `paypal_order_id`, `paypal_transaction_id`, `capture_id`, `departure_date`, `name`, `email`, `phone`, `num_spots`, `total_amount`, `error_log`, `paypal_transactions`, `custom_fields`, `customer`
+- ✅ **Términos Permitidos (vigente 2026-04-23 — Disponibilidad Dinámica):**
+  `booking`, `expedition`, `blocked_date`, `blocked_dates`, `payment_status`, `paypal_order_id`, `paypal_transaction_id`, `capture_id`, `departure_date`, `departure_time`, `daily_capacity`, `name`, `email`, `phone`, `num_spots`, `total_amount`, `error_log`, `paypal_transactions`, `custom_fields`, `customer`
 
-- ❌ **Términos Prohibidos (español — schema anterior deprecado):**
-  | Prohibido (deprecado) | Correcto (vigente) |
-  | :--- | :--- |
-  | `reserva` / `reservas` | `booking` / `bookings` |
-  | `expedicion` / `expediciones` | `expedition` / `expeditions` |
-  | `fecha_expedicion` | `expedition_date` / `expedition_dates` |
-  | `estatus_pago` | `payment_status` |
-  | `cupo_disponible` | `available_spots` |
-  | `orden_paypal` | `paypal_order_id` |
-  | `transaccion_paypal` | `paypal_transaction_id` |
-  | `fecha_salida` | `departure_date` |
-  | `cliente_nombre` / `cliente_email` / `cliente_telefono` | `customers.name` / `customers.email` / `customers.phone` |
-  | `num_lugares` | `num_spots` |
-  | `total_pagado` | `total_amount` |
-  | `log_errores` | `error_log` |
-  | `transacciones_paypal` | `paypal_transactions` |
-  | `activo` (TINYINT) | `status` ENUM('active','inactive') |
+- ❌ **Términos Prohibidos:**
+  | Prohibido | Correcto (vigente) | Motivo |
+  | :--- | :--- | :--- |
+  | `reserva` / `reservas` | `booking` / `bookings` | español deprecado |
+  | `expedicion` / `expediciones` | `expedition` / `expeditions` | español deprecado |
+  | `fecha_expedicion` / `expedition_date` / `expedition_dates` | `blocked_dates` | tabla eliminada |
+  | `expedition_date_id` | `departure_date` en payload | FK eliminada |
+  | `available_spots` | `daily_capacity` (+ conteo dinámico) | columna eliminada |
+  | `max_capacity` | `daily_capacity` | renombrado 2026-04-23 |
+  | `estatus_pago` | `payment_status` | español deprecado |
+  | `cupo_disponible` | cálculo dinámico en backend | columna eliminada |
+  | `orden_paypal` | `paypal_order_id` | español deprecado |
+  | `transaccion_paypal` | `paypal_transaction_id` | español deprecado |
+  | `fecha_salida` | `departure_date` | español deprecado |
+  | `cliente_nombre` / `cliente_email` / `cliente_telefono` | `customers.name` / `customers.email` / `customers.phone` | español deprecado |
+  | `num_lugares` | `num_spots` | español deprecado |
+  | `total_pagado` | `total_amount` | español deprecado |
+  | `log_errores` | `error_log` | español deprecado |
+  | `transacciones_paypal` | `paypal_transactions` | español deprecado |
+  | `activo` (TINYINT) | `status` ENUM('active','inactive') | tipo cambiado |
 
 ---
 
@@ -344,9 +306,19 @@ CREATE TABLE `error_log` (
 | :--- | :--- | :--- | :--- | :--- |
 | `Home` | `app/page.tsx` | Page (Client) | `View` type | ✅ Corregido |
 | `ViewToggle` | `app/page.tsx` | Sub-component | `view: View`, `onViewChange`, `variant` | ✅ Nuevo |
-| `BookingWidget` | `components/booking-widget.tsx` | Client Component | `tours[]`, `date`, `adults`, `children` | ⚠️ Datos hardcoded |
-| `AdminDashboard` | `components/admin-dashboard.tsx` | Client Component | `Reservation[]`, `ReservationStatus` | ⚠️ Datos hardcoded |
+| `BookingWidget` | `components/booking-widget.tsx` | Client Component | `Expedition[]`, `ExpeditionDate`, `departure_time` | ✅ Integrado con API |
+| `AdminDashboard` | `components/admin-dashboard.tsx` | Client Component | `BookingAdminView[]`, `PaymentStatus` | ⚠️ Datos hardcoded |
 | `ThemeProvider` | `components/theme-provider.tsx` | Provider | `ThemeProviderProps` | ✅ OK |
+
+### Constantes de Contacto (Frontend)
+
+> ⚠️ **PUNTO DE ACCIÓN PARA EL ARQUITECTO:** El número de WhatsApp de Daniel es una constante de negocio. Debe ser registrado aquí y configurado como variable de entorno `NEXT_PUBLIC_CONTACT_PHONE` en `.env.local` y `.env.example`. Actualmente es un placeholder en el código.
+
+| Constante | Variable de Entorno | Valor actual | Uso |
+| :--- | :--- | :--- | :--- |
+| `DANIEL_WHATSAPP` | `NEXT_PUBLIC_CONTACT_PHONE` | `"521XXXXXXXXXX"` ← **REEMPLAZAR** | Botón WhatsApp en widget cuando la fecha es hoy o mañana |
+
+**Regla de negocio registrada:** Si el usuario selecciona una fecha de salida que corresponde a **hoy** o **mañana**, el flujo de pago online se suspende y el widget muestra un botón de contacto directo por WhatsApp con mensaje pre-llenado (nombre de expedición, fecha, horario, número de personas).
 
 ### Types Canónicos del Frontend (booking-engine)
 

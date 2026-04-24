@@ -1,19 +1,21 @@
 "use client"
 
-import { useState } from "react"
-import { 
-  Calendar, 
-  LayoutDashboard, 
-  MapPin, 
-  ClipboardList, 
-  Menu, 
+import { useMemo, useState } from "react"
+import {
+  Calendar,
+  LayoutDashboard,
+  MapPin,
+  ClipboardList,
+  Menu,
   X,
   MessageCircle,
   XCircle,
   ChevronRight,
   Search,
   Bell,
-  Users
+  Users,
+  AlertCircle,
+  Loader2,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,87 +38,127 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-
-type ReservationStatus = "pagado" | "interesado" | "cancelado"
-
-interface Reservation {
-  id: number
-  client: string
-  phone: string
-  email: string
-  tour: string
-  date: string
-  status: ReservationStatus
-  amount: number
-  guests: number
-}
-
-const reservations: Reservation[] = [
-  { id: 1, client: "Maria Garcia", phone: "+54 9 2944 123456", email: "maria@email.com", tour: "Cabalgata por la Montana", date: "2024-03-15", status: "pagado", amount: 170, guests: 2 },
-  { id: 2, client: "Juan Rodriguez", phone: "+54 9 2944 234567", email: "juan@email.com", tour: "Kayak en el Lago", date: "2024-03-16", status: "interesado", amount: 130, guests: 2 },
-  { id: 3, client: "Ana Martinez", phone: "+54 9 2944 345678", email: "ana@email.com", tour: "Trekking al Glaciar", date: "2024-03-17", status: "pagado", amount: 360, guests: 3 },
-  { id: 4, client: "Carlos Lopez", phone: "+54 9 2944 456789", email: "carlos@email.com", tour: "Avistamiento de Fauna", date: "2024-03-18", status: "cancelado", amount: 190, guests: 2 },
-  { id: 5, client: "Laura Fernandez", phone: "+54 9 2944 567890", email: "laura@email.com", tour: "Cabalgata por la Montana", date: "2024-03-19", status: "pagado", amount: 255, guests: 3 },
-  { id: 6, client: "Pedro Sanchez", phone: "+54 9 2944 678901", email: "pedro@email.com", tour: "Kayak en el Lago", date: "2024-03-20", status: "interesado", amount: 195, guests: 3 },
-  { id: 7, client: "Sofia Romero", phone: "+54 9 2944 789012", email: "sofia@email.com", tour: "Trekking al Glaciar", date: "2024-03-21", status: "pagado", amount: 240, guests: 2 },
-  { id: 8, client: "Diego Morales", phone: "+54 9 2944 890123", email: "diego@email.com", tour: "Avistamiento de Fauna", date: "2024-03-22", status: "interesado", amount: 95, guests: 1 },
-]
+import { useBookings } from "@/hooks/use-bookings"
+import type { PaymentStatus, BookingAdminView } from "@/lib/types"
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", active: true },
   { icon: Calendar, label: "Calendario", active: false },
-  { icon: MapPin, label: "Gestion de Tours", active: false },
+  { icon: MapPin, label: "Gestión de Tours", active: false },
   { icon: ClipboardList, label: "Reservas", active: false },
 ]
 
-const statusConfig: Record<ReservationStatus, { label: string; className: string }> = {
-  pagado: { label: "Pagado", className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" },
-  interesado: { label: "Interesado", className: "bg-amber-100 text-amber-700 hover:bg-amber-100" },
-  cancelado: { label: "Cancelado", className: "bg-red-100 text-red-700 hover:bg-red-100" },
+const statusConfig: Record<PaymentStatus, { label: string; className: string }> = {
+  pending:   { label: "Pendiente",   className: "bg-amber-100 text-amber-700 hover:bg-amber-100" },
+  completed: { label: "Pagado",      className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" },
+  failed:    { label: "Fallido",     className: "bg-red-100 text-red-700 hover:bg-red-100" },
+  refunded:  { label: "Reembolsado", className: "bg-blue-100 text-blue-700 hover:bg-blue-100" },
+}
+
+/** DT-05 fix: elimina espacios, guiones y símbolo + para URL de WhatsApp */
+function sanitizePhone(phone: string): string {
+  return phone.replace(/[\s+\-()]/g, "")
 }
 
 export function AdminDashboard() {
+  const { bookings, isLoading, error, retry } = useBookings()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [reservationsList, setReservationsList] = useState(reservations)
+  // Optimistic UI: sobrescribe el estado local antes de que el backend responda
+  const [localOverrides, setLocalOverrides] = useState<Record<number, PaymentStatus>>({})
 
-  const handleCancel = (id: number) => {
-    setReservationsList(prev => 
-      prev.map(res => 
-        res.id === id ? { ...res, status: "cancelado" as ReservationStatus } : res
-      )
+  const bookingsList: BookingAdminView[] = useMemo(
+    () =>
+      bookings.map((b) =>
+        localOverrides[b.id] ? { ...b, payment_status: localOverrides[b.id] } : b
+      ),
+    [bookings, localOverrides]
+  )
+
+  // Stats derivados de los datos reales — no hardcodeados
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const bookingsToday = bookingsList.filter((b) => b.created_at.startsWith(today)).length
+
+    const revenueWeek = bookingsList
+      .filter((b) => b.payment_status === "completed")
+      .reduce((sum, b) => sum + parseFloat(b.total_amount), 0)
+
+    const total = bookingsList.length
+    const completed = bookingsList.filter((b) => b.payment_status === "completed").length
+    const conversionRate = total > 0 ? Math.round((completed / total) * 100) : 0
+
+    return [
+      { label: "Reservas Hoy",      value: String(bookingsToday), change: `de ${total} totales` },
+      { label: "Ingresos Confirmados", value: `$${revenueWeek.toLocaleString("es-MX")}`, change: "solo pagos completados" },
+      { label: "Tasa Conversión",   value: `${conversionRate}%`, change: `${completed} de ${total} reservas` },
+    ]
+  }, [bookingsList])
+
+  function handleCancel(id: number) {
+    // ⚠️ TODO: Llamar a DELETE/PATCH /api/cancelar_reserva.php antes de override local.
+    // Por ahora es optimista hasta que el endpoint esté en el Codex.
+    setLocalOverrides((prev) => ({ ...prev, [id]: "failed" }))
+  }
+
+  function handleWhatsApp(phone: string, client: string, tour: string) {
+    const message = encodeURIComponent(
+      `Hola ${client}! Te contactamos de Pegaso Expediciones respecto a tu reserva de ${tour}.`
+    )
+    window.open(`https://wa.me/${sanitizePhone(phone)}?text=${message}`, "_blank")
+  }
+
+  // ─── Loading ───────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#fcfaf5] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-[#4c4c4c]">
+          <Loader2 className="h-10 w-10 animate-spin text-[#f26d52]" />
+          <p className="text-sm">Cargando reservas…</p>
+        </div>
+      </div>
     )
   }
 
-  const handleWhatsApp = (phone: string, client: string, tour: string) => {
-    const message = encodeURIComponent(`Hola ${client}! Te contactamos de Pegaso Expediciones respecto a tu reserva de ${tour}.`)
-    window.open(`https://wa.me/${phone.replace(/\s/g, '')}?text=${message}`, '_blank')
+  // ─── Error ─────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#fcfaf5] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+          <AlertCircle className="h-10 w-10 text-red-500" />
+          <p className="text-sm text-[#4c4c4c]">{error}</p>
+          <Button
+            variant="outline"
+            onClick={retry}
+            className="border-[#f26d52] text-[#f26d52] hover:bg-[#f26d52]/10"
+          >
+            Reintentar
+          </Button>
+        </div>
+      </div>
+    )
   }
 
-  const stats = [
-    { label: "Reservas Hoy", value: "12", change: "+3 desde ayer" },
-    { label: "Ingresos Semana", value: "$4,250", change: "+15% vs semana anterior" },
-    { label: "Tasa Conversion", value: "68%", change: "+5% este mes" },
-  ]
-
+  // ─── Dashboard ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#fcfaf5] flex">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-white border-r border-gray-100 
-        transform transition-transform duration-200 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      <aside
+        className={`
+          fixed lg:static inset-y-0 left-0 z-50
+          w-64 bg-white border-r border-gray-100
+          transform transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
+      >
         <div className="flex flex-col h-full">
-          {/* Logo */}
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -128,7 +170,7 @@ export function AdminDashboard() {
                   <p className="text-xs text-[#4c4c4c]">Expediciones</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setSidebarOpen(false)}
                 className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
               >
@@ -137,18 +179,19 @@ export function AdminDashboard() {
             </div>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 p-4">
             <ul className="flex flex-col gap-1">
               {sidebarItems.map((item) => (
                 <li key={item.label}>
-                  <button className={`
-                    w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
-                    ${item.active 
-                      ? 'bg-[#fcfaf5] text-[#f26d52] font-medium' 
-                      : 'text-[#4c4c4c] hover:bg-[#fcfaf5] hover:text-[#0f0200]'
-                    }
-                  `}>
+                  <button
+                    className={`
+                      w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
+                      ${item.active
+                        ? "bg-[#fcfaf5] text-[#f26d52] font-medium"
+                        : "text-[#4c4c4c] hover:bg-[#fcfaf5] hover:text-[#0f0200]"
+                      }
+                    `}
+                  >
                     <item.icon className="h-5 w-5" />
                     <span>{item.label}</span>
                     {item.active && <ChevronRight className="h-4 w-4 ml-auto" />}
@@ -158,7 +201,6 @@ export function AdminDashboard() {
             </ul>
           </nav>
 
-          {/* User */}
           <div className="p-4 border-t border-gray-100">
             <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#fcfaf5]">
               <div className="h-10 w-10 rounded-full bg-[#f26d52]/10 flex items-center justify-center">
@@ -175,11 +217,10 @@ export function AdminDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="bg-white border-b border-gray-100 px-4 lg:px-8 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <button 
+              <button
                 onClick={() => setSidebarOpen(true)}
                 className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
               >
@@ -187,22 +228,23 @@ export function AdminDashboard() {
               </button>
               <div>
                 <h2 className="font-serif text-xl lg:text-2xl font-bold text-[#0f0200]">Dashboard</h2>
-                <p className="text-sm text-[#4c4c4c] hidden sm:block">Gestion de reservas y tours</p>
+                <p className="text-sm text-[#4c4c4c] hidden sm:block">Gestión de reservas y tours</p>
               </div>
             </div>
             <div className="flex items-center gap-2 lg:gap-4">
-              <button className="p-2 hover:bg-gray-100 rounded-lg relative">
+              <button className="p-2 hover:bg-gray-100 rounded-lg">
                 <Search className="h-5 w-5 text-[#4c4c4c]" />
               </button>
               <button className="p-2 hover:bg-gray-100 rounded-lg relative">
                 <Bell className="h-5 w-5 text-[#4c4c4c]" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-[#f26d52] rounded-full" />
+                {bookingsList.filter((b) => b.payment_status === "pending").length > 0 && (
+                  <span className="absolute top-1 right-1 h-2 w-2 bg-[#f26d52] rounded-full" />
+                )}
               </button>
             </div>
           </div>
         </header>
 
-        {/* Content */}
         <div className="flex-1 p-4 lg:p-8 overflow-auto">
           {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -221,65 +263,67 @@ export function AdminDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h3 className="font-serif text-xl font-bold text-[#0f0200]">Reservas Recientes</h3>
-                  <p className="text-sm text-[#4c4c4c]">{reservationsList.length} reservas en total</p>
+                  <p className="text-sm text-[#4c4c4c]">{bookingsList.length} reservas en total</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                     <Users className="h-3 w-3 mr-1" />
-                    {reservationsList.filter(r => r.status === 'pagado').length} pagadas
+                    {bookingsList.filter((b) => b.payment_status === "completed").length} pagadas
                   </Badge>
                 </div>
               </div>
             </div>
-            
+
             {/* Desktop Table */}
             <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-[#fcfaf5] hover:bg-[#fcfaf5]">
                     <TableHead className="font-semibold text-[#0f0200]">Cliente</TableHead>
-                    <TableHead className="font-semibold text-[#0f0200]">Tour</TableHead>
-                    <TableHead className="font-semibold text-[#0f0200]">Fecha</TableHead>
+                    <TableHead className="font-semibold text-[#0f0200]">Expedición</TableHead>
+                    <TableHead className="font-semibold text-[#0f0200]">Fecha salida</TableHead>
                     <TableHead className="font-semibold text-[#0f0200]">Estado</TableHead>
                     <TableHead className="font-semibold text-[#0f0200] text-right">Monto</TableHead>
                     <TableHead className="font-semibold text-[#0f0200] text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reservationsList.map((reservation) => (
-                    <TableRow key={reservation.id} className="hover:bg-[#fcfaf5]/50">
+                  {bookingsList.map((booking) => (
+                    <TableRow key={booking.id} className="hover:bg-[#fcfaf5]/50">
                       <TableCell>
                         <div>
-                          <p className="font-medium text-[#0f0200]">{reservation.client}</p>
-                          <p className="text-sm text-[#4c4c4c]">{reservation.email}</p>
+                          <p className="font-medium text-[#0f0200]">{booking.customer_name}</p>
+                          <p className="text-sm text-[#4c4c4c]">{booking.customer_email}</p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="text-[#0f0200]">{reservation.tour}</p>
-                          <p className="text-sm text-[#4c4c4c]">{reservation.guests} persona(s)</p>
+                          <p className="text-[#0f0200]">{booking.expedition_name}</p>
+                          <p className="text-sm text-[#4c4c4c]">{booking.num_spots} persona(s)</p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-[#4c4c4c]">{reservation.date}</TableCell>
+                      <TableCell className="text-[#4c4c4c]">{booking.departure_date}</TableCell>
                       <TableCell>
-                        <Badge className={statusConfig[reservation.status].className}>
-                          {statusConfig[reservation.status].label}
+                        <Badge className={statusConfig[booking.payment_status].className}>
+                          {statusConfig[booking.payment_status].label}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold text-[#0f0200]">
-                        ${reservation.amount}
+                        ${booking.total_amount}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleWhatsApp(reservation.phone, reservation.client, reservation.tour)}
+                            onClick={() =>
+                              handleWhatsApp(booking.customer_phone, booking.customer_name, booking.expedition_name)
+                            }
                             className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
                           >
                             <MessageCircle className="h-4 w-4" />
                           </Button>
-                          {reservation.status !== 'cancelado' && (
+                          {booking.payment_status !== "failed" && booking.payment_status !== "refunded" && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -294,16 +338,17 @@ export function AdminDashboard() {
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Cancelar Reserva</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Estas seguro de cancelar la reserva de {reservation.client} para {reservation.tour}? Esta accion no se puede deshacer.
+                                    ¿Estás seguro de cancelar la reserva de {booking.customer_name} para{" "}
+                                    {booking.expedition_name}? Esta acción no se puede deshacer.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>No, mantener</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => handleCancel(reservation.id)}
+                                    onClick={() => handleCancel(booking.id)}
                                     className="bg-red-500 hover:bg-red-600"
                                   >
-                                    Si, cancelar
+                                    Sí, cancelar
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -319,32 +364,34 @@ export function AdminDashboard() {
 
             {/* Mobile Cards */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {reservationsList.map((reservation) => (
-                <div key={reservation.id} className="p-4">
+              {bookingsList.map((booking) => (
+                <div key={booking.id} className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="font-medium text-[#0f0200]">{reservation.client}</p>
-                      <p className="text-sm text-[#4c4c4c]">{reservation.tour}</p>
+                      <p className="font-medium text-[#0f0200]">{booking.customer_name}</p>
+                      <p className="text-sm text-[#4c4c4c]">{booking.expedition_name}</p>
                     </div>
-                    <Badge className={statusConfig[reservation.status].className}>
-                      {statusConfig[reservation.status].label}
+                    <Badge className={statusConfig[booking.payment_status].className}>
+                      {statusConfig[booking.payment_status].label}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm mb-3">
-                    <span className="text-[#4c4c4c]">{reservation.date}</span>
-                    <span className="font-semibold text-[#0f0200]">${reservation.amount}</span>
+                    <span className="text-[#4c4c4c]">{booking.departure_date}</span>
+                    <span className="font-semibold text-[#0f0200]">${booking.total_amount}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleWhatsApp(reservation.phone, reservation.client, reservation.tour)}
+                      onClick={() =>
+                        handleWhatsApp(booking.customer_phone, booking.customer_name, booking.expedition_name)
+                      }
                       className="flex-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
                     >
                       <MessageCircle className="h-4 w-4 mr-2" />
                       WhatsApp
                     </Button>
-                    {reservation.status !== 'cancelado' && (
+                    {booking.payment_status !== "failed" && booking.payment_status !== "refunded" && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
@@ -359,16 +406,16 @@ export function AdminDashboard() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Cancelar Reserva</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Estas seguro de cancelar la reserva de {reservation.client}? Esta accion no se puede deshacer.
+                              ¿Estás seguro de cancelar la reserva de {booking.customer_name}? Esta acción no se puede deshacer.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>No, mantener</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => handleCancel(reservation.id)}
+                              onClick={() => handleCancel(booking.id)}
                               className="bg-red-500 hover:bg-red-600"
                             >
-                              Si, cancelar
+                              Sí, cancelar
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

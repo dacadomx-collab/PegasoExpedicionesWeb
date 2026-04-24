@@ -44,15 +44,15 @@ POST api/confirmar_reserva.php    <- Fase 2 del pago (PayPal -> Backend -> DB)
 
 ---
 
-### ENDPOINT 1: `api/get_expediciones.php`
+### ENDPOINT 1: `api/get_expediciones.php` — ACTUALIZADO 2026-04-23
 **Método:** `GET`
-**Propósito:** Devolver el catálogo de expediciones activas con sus fechas de salida disponibles. Alimenta el paso 1 del formulario de reservas.
+**Propósito:** Devolver el catálogo de expediciones activas con su `daily_capacity` y el array `blocked_dates` para que el `<Calendar />` deshabilite días específicos. Ya **no devuelve** `expedition_dates` ni `available_spots`.
 
 **Payload Requerido (Front -> Back):** Ninguno.
 
 **Validaciones del Backend:**
-- Solo devuelve expediciones donde `expediciones.activo = 1`.
-- Solo devuelve fechas donde `fechas_expedicion.activo = 1` AND `cupo_disponible > 0` AND `fecha_salida >= CURDATE()`.
+- Solo devuelve expediciones donde `expeditions.status = 'active'`.
+- El array `blocked_dates` se obtiene con `SELECT blocked_date, reason FROM blocked_dates WHERE expedition_id = X`.
 
 **Response Exitoso (HTTP 200):**
 ```json
@@ -61,27 +61,24 @@ POST api/confirmar_reserva.php    <- Fase 2 del pago (PayPal -> Backend -> DB)
   "message": "Expediciones obtenidas correctamente.",
   "data": [
     {
-      "expedicion_id": 1,
-      "nombre": "Tiburón Ballena",
-      "descripcion": "Nada junto al gigante del mar en La Paz, BCS.",
-      "precio": "1500.00",
-      "imagen_url": "/assets/img/tiburon-ballena.jpg",
-      "fechas": [
-        {
-          "fecha_expedicion_id": 3,
-          "fecha_salida": "2026-05-10",
-          "cupo_disponible": 8
-        },
-        {
-          "fecha_expedicion_id": 7,
-          "fecha_salida": "2026-05-24",
-          "cupo_disponible": 12
-        }
+      "id": 1,
+      "name": "Tiburón Ballena",
+      "description": "Nada junto al gigante del mar en La Paz, BCS.",
+      "price": "1500.00",
+      "daily_capacity": 12,
+      "image_url": "/assets/img/tiburon-ballena.jpg",
+      "status": "active",
+      "custom_fields": null,
+      "blocked_dates": [
+        { "date": "2026-05-15", "reason": "mantenimiento de embarcación" },
+        { "date": "2026-05-20", "reason": null }
       ]
     }
   ]
 }
 ```
+
+> **Nota de implementación PHP:** El array `blocked_dates` puede ser vacío `[]` si no hay días bloqueados para esa expedición. El frontend maneja ambos casos.
 
 **Response Error (HTTP 500):**
 ```json
@@ -90,44 +87,46 @@ POST api/confirmar_reserva.php    <- Fase 2 del pago (PayPal -> Backend -> DB)
 
 ---
 
-### ENDPOINT 2: `api/crear_orden_paypal.php`
+### ENDPOINT 2: `api/crear_orden_paypal.php` — ACTUALIZADO 2026-04-23
 **Método:** `POST`
-**Propósito:** Validar el payload del cliente, verificar disponibilidad de cupo, calcular el `total_pagado` en backend y crear una Orden en la API de PayPal. Devuelve el `orden_paypal` al frontend para iniciar el flujo de aprobación del usuario.
+**Propósito:** Validar el payload del cliente, verificar disponibilidad dinámica de cupo para la `departure_date` elegida, calcular el total en backend y crear una Orden en la API de PayPal.
 
 > 🔒 **Fase 1 del Flujo de Pago Blindado. El precio JAMÁS viene del frontend.**
+> 🔒 **`expedition_date_id` ELIMINADO — reemplazado por `departure_date` libre elegida en Calendar.**
 
 **Payload Requerido (Front -> Back):**
 ```json
 {
-  "expedicion_id": 1,
-  "fecha_expedicion_id": 3,
-  "num_lugares": 2,
-  "cliente_nombre": "Ana García López",
-  "cliente_email": "ana@ejemplo.com",
-  "cliente_telefono": "6641234567"
+  "expedition_id": 1,
+  "departure_date": "2026-05-10",
+  "num_spots": 2,
+  "customer_name": "Ana García López",
+  "customer_email": "ana@ejemplo.com",
+  "customer_phone": "6641234567"
 }
 ```
 
 **Validaciones del Backend (HTTP 422 si falla alguna):**
 | Campo | Tipo esperado | Regla |
 | :--- | :--- | :--- |
-| `expedicion_id` | INT > 0 | Existe en DB y `activo = 1` |
-| `fecha_expedicion_id` | INT > 0 | Existe en DB, `activo = 1`, `fecha_salida >= CURDATE()` |
-| `num_lugares` | INT 1–20 | `<= cupo_disponible` actual (consulta en tiempo real) |
-| `cliente_nombre` | STRING | `trim()`, no vacío, min 3 chars |
-| `cliente_email` | STRING | `FILTER_VALIDATE_EMAIL`, lowercase |
-| `cliente_telefono` | STRING | `trim()`, min 7 dígitos, solo numérico |
+| `expedition_id` | INT > 0 | Existe en `expeditions` con `status = 'active'` |
+| `departure_date` | STRING DATE | Formato `YYYY-MM-DD`, `>= CURDATE()`, NO en `blocked_dates` de esa expedición |
+| `num_spots` | INT 1–20 | `(bookings activos en esa fecha) + num_spots <= daily_capacity` |
+| `customer_name` | STRING | `trim()`, no vacío, min 3 chars |
+| `customer_email` | STRING | `FILTER_VALIDATE_EMAIL`, lowercase |
+| `customer_phone` | STRING | `trim()`, min 7 dígitos numéricos |
 
 **Lógica Interna del Backend (orden de ejecución):**
-1. Sanitizar y validar todos los campos. Devolver HTTP 422 si falla.
-2. Consultar `precio` de `expediciones` y `cupo_disponible` de `fechas_expedicion` (con `SELECT ... FOR UPDATE` para evitar race conditions).
-3. Verificar `cupo_disponible >= num_lugares`. Devolver HTTP 422 si falla.
-4. Calcular `total_pagado = precio × num_lugares`.
-5. Crear fila en `reservas` con `estatus_pago = 'pendiente'` (pre-reserva atómica).
-6. Llamar a la API de PayPal para crear la Orden con el `total_pagado` calculado en backend.
-7. Actualizar la fila en `reservas` con el `orden_paypal` devuelto por PayPal.
-8. Insertar registro en `transacciones_paypal` con `fase = 'orden_creada'`.
-9. Devolver `orden_paypal` al frontend.
+1. Sanitizar y validar todos los campos (422 si falla).
+2. Verificar que `departure_date` no esté en `blocked_dates` para esa expedición (422 si bloqueada).
+3. **Anti-doble reserva:** `SELECT COUNT(*) FROM bookings WHERE expedition_id=X AND departure_date=Y AND payment_status != 'failed' FOR UPDATE`. Verificar `count + num_spots <= daily_capacity` (422 si sin cupo).
+4. Consultar `price` de `expeditions`. Calcular `total_amount = price × num_spots`.
+5. Insertar en `customers` (o reutilizar por email). Obtener `customer_id`.
+6. Insertar en `bookings` con `payment_status = 'pending'` y `departure_date` recibida.
+7. Llamar a la API de PayPal para crear la Orden con `total_amount`.
+8. Actualizar `bookings.paypal_order_id` con el ID devuelto por PayPal.
+9. Insertar en `paypal_transactions` con `fase = 'orden_creada'`.
+10. Devolver `paypal_order_id` al frontend.
 
 **Response Exitoso (HTTP 200):**
 ```json
