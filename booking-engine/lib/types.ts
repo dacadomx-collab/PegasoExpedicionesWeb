@@ -65,6 +65,87 @@ export interface BookingAdminView {
   customer_phone: string
 }
 
+// ── Confirmación de reserva (Back → Front tras captura PayPal) ──
+
+export interface BookingConfirmation {
+  paypal_transaction_id: string
+  created_at: string       // "YYYY-MM-DD HH:mm:ss"
+  customer_name: string
+  expedition_name: string
+  departure_date: string   // "YYYY-MM-DD"
+  num_spots: number
+  total_amount: string     // DECIMAL como string
+}
+
+// ── FASE 5: RBAC (2026-04-24) ────────────────────────────────
+// Roles canónicos — deben coincidir con los valores en admin_users.role (DB)
+export type AdminRole = "super_admin" | "operaciones" | "ventas"
+
+export interface AdminUser {
+  id:            number
+  name:          string
+  email:         string
+  role:          AdminRole
+  active:        number       // 0 | 1
+  last_login_at: string | null
+  created_at:    string
+}
+
+export interface CreateAdminUserPayload {
+  name:     string
+  email:    string
+  password: string
+  role:     AdminRole
+}
+
+// ── FASE 4: Auth & Settings (2026-04-24) ─────────────────────
+
+export interface LoginPayload {
+  email:    string
+  password: string
+}
+
+export interface LoginResponse {
+  token:       string
+  admin_name:  string
+  admin_email: string
+  role:        string
+  expires_in:  number
+}
+
+export interface SystemSetting {
+  key:          string
+  value:        string
+  description:  string | null
+  is_sensitive: number  // 0 | 1
+  updated_at:   string | null
+}
+
+export interface PublicSettings {
+  paypal_client_id: string
+  paypal_mode:      "sandbox" | "live"
+  whatsapp_phone:   string
+  sales_paused:     string
+}
+
+// ── FASE 6: Gestión de Expediciones (2026-04-25) ─────────────
+
+export interface CustomFieldEntry {
+  key:   string
+  value: string
+}
+
+export interface SaveExpeditionPayload {
+  id?:            number
+  name:           string
+  description:    string
+  price:          string
+  daily_capacity: number
+  image_url:      string
+  status:         "active" | "inactive"
+  custom_fields:  CustomFieldEntry[]
+}
+
 // ── Payload de crear orden (Front → Back) ─────────────────────
 // Contrato: 03_CONTRATOS_API_Y_LOGICA.md § ENDPOINT 2 (actualizado 2026-04-23)
 // expedition_date_id eliminado — el frontend ahora envía departure_date elegida en Calendar.

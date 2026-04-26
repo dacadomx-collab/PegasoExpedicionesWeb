@@ -33,9 +33,17 @@
 ## 🗺️ MAPA DE ENDPOINTS (ARQUITECTURA)
 
 ```
-GET  api/get_expediciones.php     <- Alimenta el formulario inicial
-POST api/crear_orden_paypal.php   <- Fase 1 del pago (Backend -> PayPal)
-POST api/confirmar_reserva.php    <- Fase 2 del pago (PayPal -> Backend -> DB)
+GET  api/get_expediciones.php       <- Catálogo de expediciones con blocked_dates
+POST api/crear_orden_paypal.php     <- Fase 1 del pago (Backend -> PayPal)
+POST api/confirmar_reserva.php      <- Fase 2 del pago (PayPal -> Backend -> DB)
+GET  api/get_reservas.php           <- Reservas enriquecidas para el admin dashboard
+POST api/login.php                  <- Auth admin: email + password -> JWT  [FASE 4]
+GET  api/get_public_settings.php    <- Config pública: paypal_client_id, whatsapp  [FASE 4]
+GET  api/get_settings.php           <- Todas las settings (JWT + super_admin)  [FASE 4]
+POST api/update_settings.php        <- Actualizar setting + audit log (JWT + super_admin)  [FASE 4]
+GET  api/list_admin_users.php       <- Listar admins (JWT + super_admin)  [FASE 5]
+POST api/create_admin_user.php      <- Crear admin con rol (JWT + super_admin)  [FASE 5]
+POST api/toggle_admin_user.php      <- Activar/desactivar admin (JWT + super_admin)  [FASE 5]
 ```
 
 ---
@@ -222,6 +230,205 @@ POST api/confirmar_reserva.php    <- Fase 2 del pago (PayPal -> Backend -> DB)
 **Response Error de Pago (HTTP 500):**
 ```json
 { "status": "error", "message": "El pago no pudo ser completado. No se realizó ningún cargo. Intenta de nuevo." }
+```
+
+---
+
+---
+
+### ENDPOINT 4: `api/login.php` — FASE 4 (2026-04-24)
+**Método:** `POST`
+**Propósito:** Autenticar un administrador con email + contraseña. Devuelve JWT HS256 con TTL 8 h.
+**Auth requerida:** No.
+
+**Payload Requerido (Front -> Back):**
+```json
+{ "email": "admin@pegasoexpediciones.com", "password": "miContraseñaSegura" }
+```
+
+**Validaciones (HTTP 422 si falla):**
+| Campo | Regla |
+| :--- | :--- |
+| `email` | `FILTER_VALIDATE_EMAIL`, lowercase |
+| `password` | no vacío |
+
+**Lógica:**
+1. Validar campos (422 si falla).
+2. Buscar en `admin_users` por email con `active = 1`.
+3. Ejecutar `password_verify()` con hash dummy si el usuario no existe (timing-safe).
+4. Si falla: HTTP 401 con mensaje genérico (no revelar si el email existe).
+5. Si éxito: firmar JWT HS256 con `JWT_SECRET` del `.env`, TTL 8 h. Actualizar `last_login_at`.
+
+**Response Exitoso (HTTP 200):**
+```json
+{
+  "status": "success",
+  "message": "¡Bienvenido, Daniel!",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "admin_name": "Daniel García",
+    "admin_email": "admin@pegasoexpediciones.com",
+    "role": "admin",
+    "expires_in": 28800
+  }
+}
+```
+
+**Response Error (HTTP 401):**
+```json
+{ "status": "error", "message": "Credenciales incorrectas." }
+```
+
+---
+
+### ENDPOINT 5: `api/get_public_settings.php` — FASE 4 (2026-04-24)
+**Método:** `GET`
+**Propósito:** Configuración pública del sistema para el booking widget. Sin auth. NUNCA devuelve el `paypal_client_secret`.
+**Auth requerida:** No.
+
+**Payload Requerido:** Ninguno.
+
+**Response Exitoso (HTTP 200):**
+```json
+{
+  "status": "success",
+  "message": "Configuración pública obtenida.",
+  "data": {
+    "paypal_client_id": "AZm5Bv63l_CgRYhMl96i1gWEwqezz54...",
+    "paypal_mode": "sandbox",
+    "whatsapp_phone": "521XXXXXXXXXX",
+    "sales_paused": "false"
+  }
+}
+```
+
+---
+
+### ENDPOINT 6: `api/get_settings.php` — ACTUALIZADO FASE 6 (2026-04-25)
+**Método:** `GET`
+**Propósito:** Devuelve todas las claves de `system_settings`. Los de `is_secret = 1` se enmascaran (muestra `••••••••` + últimos 4 chars).
+**Auth requerida:** JWT Bearer Token + `role = super_admin`.
+
+> **Implementación:** Usa alias SQL (`setting_key AS key`, `setting_value AS value`, `is_secret AS is_sensitive`) para que el JSON mantenga el contrato con el frontend sin cambios.
+
+**Headers requeridos:**
+```
+Authorization: Bearer <token>
+```
+
+**Response Exitoso (HTTP 200):**
+```json
+{
+  "status": "success",
+  "message": "Configuración obtenida.",
+  "data": [
+    { "key": "paypal_mode",              "value": "sandbox",         "description": "Entorno PayPal activo",           "is_sensitive": 0, "updated_at": "2026-04-25 10:00:00" },
+    { "key": "paypal_client_id_sandbox", "value": "AZm5Bv63...",     "description": "Client ID PayPal Sandbox",        "is_sensitive": 0, "updated_at": "2026-04-25 10:00:00" },
+    { "key": "paypal_secret_sandbox",    "value": "••••••••Vm7m",    "description": "Client Secret PayPal Sandbox",    "is_sensitive": 1, "updated_at": "2026-04-25 10:00:00" },
+    { "key": "paypal_client_id_live",    "value": "",                 "description": "Client ID PayPal Live",           "is_sensitive": 0, "updated_at": null },
+    { "key": "paypal_secret_live",       "value": "",                 "description": "Client Secret PayPal Live",       "is_sensitive": 1, "updated_at": null },
+    { "key": "whatsapp_contact",         "value": "521XXXXXXXXXX",   "description": "WhatsApp de contacto",            "is_sensitive": 0, "updated_at": null },
+    { "key": "urgent_booking_msg",       "value": "Sin disponibilidad…", "description": "Mensaje cuando pausado",      "is_sensitive": 0, "updated_at": null },
+    { "key": "admin_notification_emails","value": "admin@x.com",     "description": "Emails CSV de alertas admin",     "is_sensitive": 0, "updated_at": null },
+    { "key": "sales_paused",             "value": "false",           "description": "Pausa global de ventas",          "is_sensitive": 0, "updated_at": null }
+  ]
+}
+```
+
+**Response Error (HTTP 401):**
+```json
+{ "status": "error", "message": "Autenticación requerida." }
+```
+
+---
+
+### ENDPOINT 7: `api/update_settings.php` — ACTUALIZADO FASE 6 (2026-04-25)
+**Método:** `POST`
+**Propósito:** Actualiza el valor de una clave en `system_settings` e inserta registro en `system_settings_audit`.
+**Auth requerida:** JWT Bearer Token + `role = super_admin`.
+
+**Payload Requerido (Front -> Back):**
+```json
+{ "key": "whatsapp_contact", "value": "521YYYYYYYYYY" }
+```
+
+**Validaciones (HTTP 422 si falla):**
+| Campo | Regla |
+| :--- | :--- |
+| `key` | No vacío. Debe existir como `setting_key` en `system_settings`. |
+| `value` | String (puede ser vacío para limpiar). |
+
+**Lógica (columnas reales en BD):**
+1. Validar JWT + rol (401/403 si falla).
+2. Validar `key` no vacía (422).
+3. `SELECT setting_key, setting_value FROM system_settings WHERE setting_key = ?` (422 si no existe).
+4. Transacción: `UPDATE system_settings SET setting_value = ?, updated_at = NOW(), updated_by = ? WHERE setting_key = ?`
+5. `INSERT INTO system_settings_audit (setting_key, old_value, new_value, changed_by, changed_at)`
+6. Si algo falla: ROLLBACK.
+
+**Response Exitoso (HTTP 200):**
+```json
+{
+  "status": "success",
+  "message": "Configuración 'whatsapp_contact' actualizada correctamente.",
+  "data": { "key": "whatsapp_contact" }
+}
+```
+
+**Response Error (HTTP 422):**
+```json
+{
+  "status": "error",
+  "message": "Clave de configuración no reconocida.",
+  "errors": [ "key: 'clave_inventada' no existe en system_settings." ]
+}
+```
+
+---
+
+### ENDPOINT 8: `api/list_admin_users.php` — FASE 5 (2026-04-24)
+**Método:** `GET` | **Auth:** JWT + `role = super_admin`
+
+**Response Exitoso (HTTP 200):**
+```json
+{
+  "status": "success", "message": "Usuarios obtenidos.",
+  "data": [
+    { "id": 1, "name": "Daniel García", "email": "admin@pegaso.com", "role": "super_admin",
+      "active": 1, "last_login_at": "2026-04-24 10:00:00", "created_at": "2026-04-24 09:00:00" }
+  ]
+}
+```
+> `password_hash` NUNCA se incluye en la respuesta.
+
+---
+
+### ENDPOINT 9: `api/create_admin_user.php` — FASE 5 (2026-04-24)
+**Método:** `POST` | **Auth:** JWT + `role = super_admin`
+
+**Payload:**
+```json
+{ "name": "María López", "email": "maria@pegaso.com", "password": "segura1234", "role": "operaciones" }
+```
+**Validaciones (422):** name ≥ 3 chars · email válido · password ≥ 8 chars · role ∈ {super_admin, operaciones, ventas} · email único.
+
+**Response Exitoso (HTTP 200):**
+```json
+{ "status": "success", "message": "Usuario 'María López' creado con éxito.", "data": { "id": 2, "name": "María López", "email": "maria@pegaso.com", "role": "operaciones", "active": 1 } }
+```
+
+---
+
+### ENDPOINT 10: `api/toggle_admin_user.php` — FASE 5 (2026-04-24)
+**Método:** `POST` | **Auth:** JWT + `role = super_admin`
+
+**Payload:** `{ "user_id": 2 }`
+
+**Validaciones (422):** user_id ≥ 1 · no puede ser el mismo ID del admin autenticado (auto-desactivación bloqueada).
+
+**Response Exitoso (HTTP 200):**
+```json
+{ "status": "success", "message": "Usuario 'María López' desactivado correctamente.", "data": { "id": 2, "active": 0 } }
 ```
 
 ---

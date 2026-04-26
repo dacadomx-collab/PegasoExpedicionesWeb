@@ -271,8 +271,9 @@ try {
     $bookingId = (int) $pdo->lastInsertId();
 
     // ── 7. Crear orden en PayPal (Circuit Breaker incluido) ───
+    // $pdo se pasa para que la función lea las credenciales desde system_settings (BD > .env)
     $description   = sprintf('%s ×%d — %s', $expedition['name'], $numSpots, $departureDate);
-    $paypalOrderId = callPaypalCreateOrder($totalAmount, $description);
+    $paypalOrderId = callPaypalCreateOrder($totalAmount, $description, $pdo);
 
     // ── 8. Persistir paypal_order_id en el booking ────────────
     $pdo->prepare("UPDATE bookings SET paypal_order_id = ? WHERE id = ?")
@@ -336,17 +337,55 @@ try {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Lee un valor de system_settings (BD). Devuelve '' si no existe o hay error.
+ * Silencia excepciones para no bloquear el flujo si system_settings no existe aún.
+ */
+function getPaypalSetting(PDO $pdo, string $key): string
+{
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
+        $stmt->execute([$key]);
+        $row = $stmt->fetch();
+        return ($row !== false && (string) $row['setting_value'] !== '') ? (string) $row['setting_value'] : '';
+    } catch (\Throwable) {
+        return '';
+    }
+}
+
+/**
  * Crea una Orden PayPal con intent CAPTURE y devuelve su ID.
- * Credenciales leídas del .env: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_MODE.
+ * Prioridad de credenciales: system_settings (BD) → .env (fallback).
  *
  * @throws \RuntimeException si las credenciales faltan o PayPal devuelve error.
  */
-function callPaypalCreateOrder(string $totalAmount, string $description): string
+function callPaypalCreateOrder(string $totalAmount, string $description, PDO $pdo): string
 {
-    $env          = parseEnvFile(dirname(__DIR__) . '/.env');
-    $clientId     = $env['PAYPAL_CLIENT_ID']     ?? '';
-    $clientSecret = $env['PAYPAL_CLIENT_SECRET'] ?? '';
-    $mode         = $env['PAYPAL_MODE']          ?? 'sandbox';
+    // 1ª fuente: BD (admin puede actualizarlas desde el dashboard)
+    // Leer el modo activo primero para seleccionar las claves granulares correctas
+    $mode = getPaypalSetting($pdo, 'paypal_mode');
+    if (!in_array($mode, ['sandbox', 'live'], true)) {
+        $env  = parseEnvFile(dirname(__DIR__) . '/.env');
+        $mode = $env['PAYPAL_MODE'] ?? 'sandbox';
+    }
+
+    // Intentar leer claves granulares (paypal_client_id_sandbox / paypal_client_id_live)
+    $clientId     = getPaypalSetting($pdo, "paypal_client_id_{$mode}");
+    $clientSecret = getPaypalSetting($pdo, "paypal_secret_{$mode}");
+
+    // Fallback a claves legacy si las granulares están vacías
+    if ($clientId === '') {
+        $clientId = getPaypalSetting($pdo, 'paypal_client_id');
+    }
+    if ($clientSecret === '') {
+        $clientSecret = getPaypalSetting($pdo, 'paypal_client_secret');
+    }
+
+    // Último fallback: .env
+    if ($clientId === '' || $clientSecret === '') {
+        $env          = parseEnvFile(dirname(__DIR__) . '/.env');
+        $clientId     = $clientId     !== '' ? $clientId     : ($env['PAYPAL_CLIENT_ID']     ?? '');
+        $clientSecret = $clientSecret !== '' ? $clientSecret : ($env['PAYPAL_CLIENT_SECRET'] ?? '');
+    }
 
     if ($clientId === '' || $clientSecret === '') {
         throw new \RuntimeException(

@@ -138,6 +138,93 @@
 
 > **Regla de cupo dinámico (2026-04-23):** El backend valida que `(SELECT COUNT(*) FROM bookings WHERE expedition_id = X AND departure_date = Y AND payment_status != 'failed') + num_spots <= daily_capacity`. Esta consulta usa `SELECT ... FOR UPDATE` para evitar race conditions (anti-doble reserva).
 
+### Módulo: `admin_users` — FASE 4 (2026-04-24) ⚠️ SCHEMA VERIFICADO CON ALTER TABLE REAL
+> **Origen:** Columnas base creadas por el Arquitecto TARS. Columnas `role`, `active` y `last_login_at`
+> añadidas con ALTER TABLE ejecutado manualmente el 2026-04-24. Este registro refleja el schema REAL.
+
+| Concepto | DB (`snake_case`) | Frontend | Tipo REAL (confirmado) | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID Admin (PK) | `id` | ❌ NO EXPONER | INT UNSIGNED | auto_increment |
+| Nombre completo | `name` | `adminName` | VARCHAR(255) | no vacío |
+| Correo | `email` | `adminEmail` | VARCHAR(255) | UNIQUE, FILTER_VALIDATE_EMAIL |
+| Rol | `role` | `role` | VARCHAR(50) | DEFAULT `'super_admin'`. Posibles valores: `'super_admin'`. Se añadió AFTER `email`. |
+| Activo | `active` | ❌ NO EXPONER | TINYINT(1) | DEFAULT 1. Solo `active = 1` puede iniciar sesión. Se añadió AFTER `role`. |
+| Hash de contraseña | `password_hash` | ❌ NO EXPONER | VARCHAR(255) | bcrypt cost 12. NUNCA al frontend ni logs. |
+| Creación | `created_at` | ❌ NO EXPONER | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| Último login | `last_login_at` | ❌ NO EXPONER | DATETIME NULL | Actualizado post-login con try/catch aislado. Se añadió AFTER `created_at`. |
+
+> **Roles canónicos permitidos en `admin_users.role` (FASE 5 — 2026-04-24):**
+> | Valor en DB | Label UI | Acceso permitido |
+> | :--- | :--- | :--- |
+> | `super_admin` | Super Admin | Todas las pestañas: Reservas, Configuración, Usuarios |
+> | `operaciones` | Operaciones | Solo pestaña Reservas + Calendario de Ocupación |
+> | `ventas` | Ventas | Solo pestaña Reservas (vista y WhatsApp) |
+>
+> **Endpoints protegidos por rol (Seguridad Perimetral):**
+> - `requireRole(['super_admin'])` → `get_settings.php`, `update_settings.php`, `list_admin_users.php`, `create_admin_user.php`, `toggle_admin_user.php`
+> - `requireRole(['super_admin', 'operaciones', 'ventas'])` → endpoints sin restricción de rol adicional (solo JWT válido)
+>
+> **ALTER TABLE ejecutados (2026-04-24 — por el Arquitecto TARS, corrección de violación Mandamiento #9):**
+> ```sql
+> ALTER TABLE admin_users ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'super_admin' AFTER email;
+> ALTER TABLE admin_users ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1 AFTER role;
+> ALTER TABLE admin_users ADD COLUMN last_login_at DATETIME NULL AFTER created_at;
+> ```
+
+> **Reglas de Seguridad:**
+> - `password_hash` usa `PASSWORD_BCRYPT` con `cost = 12`. Nunca almacenar texto plano.
+> - `login.php` usa `password_verify()` con hash dummy si el usuario no existe (evita timing attacks).
+> - Los tokens JWT tienen TTL 8 horas. Firmados con HS256 usando `JWT_SECRET` del `.env`.
+> - El script `setup_first_admin.php` inserta `role = 'super_admin'` (alineado con DEFAULT real). Solo funciona si `admin_users` está vacío. **Eliminarlo tras el primer uso.**
+> - `UPDATE last_login_at` está en su propio `try/catch` en `login.php` — un fallo aquí NO impide que el admin acceda.
+
+### Módulo: `system_settings` — CORREGIDO FASE 6 (2026-04-25) ⚠️ COLUMNAS REALES VERIFICADAS
+> **ERRATA resuelta 2026-04-25:** El Codex previo usaba `key`, `value`, `is_sensitive`. El esquema REAL en BD es `setting_key`, `setting_value`, `is_secret`. Todo el PHP fue corregido para usar los nombres reales. Los endpoints usan alias SQL para mantener el contrato JSON con el frontend sin cambios.
+
+| Concepto | DB — columna REAL | JSON API (alias) | Tipo | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID (PK) | `id` | ❌ NO EXPONER | INT UNSIGNED | auto_increment |
+| Clave del ajuste | `setting_key` | `key` | VARCHAR(100) | UNIQUE. Formato `snake_case`. |
+| Valor del ajuste | `setting_value` | `value` | TEXT | El valor real. Ver enmascarado abajo. |
+| Descripción | `description` | `description` | VARCHAR(500) | nullable. |
+| ¿Sensible? | `is_secret` | `is_sensitive` (alias) | TINYINT(1) | 1 = enmascarar en `get_settings.php` (muestra `••••••••` + últimos 4 chars). |
+| Actualizado el | `updated_at` | `updated_at` | DATETIME | Se actualiza en cada UPDATE. |
+| Actualizado por | `updated_by` | ❌ NO EXPONER | INT UNSIGNED | FK → `admin_users.id`. Nullable. |
+
+**Claves canónicas de `system_settings` — ACTUALIZADAS FASE 6 (2026-04-25):**
+| setting_key | Tipo de valor | is_secret | Descripción |
+| :--- | :--- | :--- | :--- |
+| `paypal_mode` | `sandbox` \| `live` | 0 | Entorno PayPal activo |
+| `paypal_client_id_sandbox` | STRING | 0 | Client ID público de la app PayPal Sandbox |
+| `paypal_secret_sandbox` | STRING | **1** | Client Secret de la app PayPal Sandbox — enmascarado en UI |
+| `paypal_client_id_live` | STRING | 0 | Client ID público de la app PayPal Live |
+| `paypal_secret_live` | STRING | **1** | Client Secret de la app PayPal Live — enmascarado en UI |
+| `whatsapp_contact` | STRING `521XXXXXXXXXX` | 0 | Número de WhatsApp sin `+` (reemplaza `whatsapp_phone`) |
+| `urgent_booking_msg` | STRING | 0 | Mensaje en widget cuando ventas pausadas |
+| `admin_notification_emails` | `email1,email2` | 0 | CSV de correos que reciben alertas de nueva reserva |
+| `sales_paused` | `true` \| `false` | 0 | Pausa global de ventas |
+| `paypal_client_id` | STRING | 0 | **OBSOLETA** — legacy, reemplazada por las granulares sandbox/live |
+| `paypal_client_secret` | STRING | **1** | **OBSOLETA** — legacy, reemplazada por las granulares sandbox/live |
+| `whatsapp_phone` | STRING | 0 | **OBSOLETA** — legacy, reemplazada por `whatsapp_contact` |
+
+> **Reglas de Lectura:**
+> - `get_public_settings.php` (sin auth): lee `paypal_mode`, resuelve `paypal_client_id_{mode}` y lo expone como `paypal_client_id`. Lee `whatsapp_contact` (fallback `whatsapp_phone`). Expone también `sales_paused` y `urgent_booking_msg`. NUNCA expone secrets.
+> - `get_settings.php` (JWT requerido): devuelve todas las claves. Los de `is_secret = 1` se enmascaran. Alias SQL: `setting_key AS key`, `setting_value AS value`, `is_secret AS is_sensitive`.
+> - `crear_orden_paypal.php` lee `paypal_mode` → selecciona `paypal_client_id_{mode}` y `paypal_secret_{mode}`. Fallback a claves legacy → `.env`.
+> - `update_settings.php` recibe `{ key, value }` del frontend. Busca en BD por `setting_key = key`. Actualiza `setting_value`.
+
+### Módulo: `system_settings_audit` — CORREGIDO FASE 6 (2026-04-25)
+| Concepto | DB — columna REAL | Frontend | Tipo | Regla |
+| :--- | :--- | :--- | :--- | :--- |
+| ID (PK) | `id` | ❌ NO EXPONER | INT UNSIGNED | auto_increment |
+| Clave modificada | `setting_key` | ❌ NO EXPONER | VARCHAR(100) | Copia de `system_settings.setting_key` |
+| Valor anterior | `old_value` | ❌ NO EXPONER | TEXT | nullable. |
+| Valor nuevo | `new_value` | ❌ NO EXPONER | TEXT | El valor guardado. |
+| Quién cambió | `changed_by` | ❌ NO EXPONER | INT UNSIGNED | FK → `admin_users.id`. Nullable. |
+| Cuándo | `changed_at` | ❌ NO EXPONER | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+
+> **Regla:** Tabla de solo append (INSERT only). NUNCA UPDATE ni DELETE. El INSERT va dentro de la misma transacción que el UPDATE de `system_settings`.
+
 ---
 
 ## 🧠 REGISTRO SEMÁNTICO (VOCABULARIO CONTROLADO)

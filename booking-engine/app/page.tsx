@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { BookingWidget } from "@/components/booking-widget"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { MapPin } from "lucide-react"
@@ -60,6 +60,13 @@ function ViewToggle({ view, onViewChange, variant = "header" }: ViewToggleProps)
 
 export default function Home() {
   const [view, setView] = useState<View>("widget")
+
+  // Post-hidratación: leer el query param de forma segura (evita mismatch SSR/cliente)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "dashboard") {
+      setView("dashboard")
+    }
+  }, [])
 
   return (
     <div className="min-h-screen">
