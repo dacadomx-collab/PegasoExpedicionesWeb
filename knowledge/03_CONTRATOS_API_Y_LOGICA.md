@@ -433,6 +433,59 @@ Authorization: Bearer <token>
 
 ---
 
+## 🌐 GESTIÓN DE ENTORNOS — FASE 6 (2026-04-25)
+
+### Variables de entorno del Backend (PHP — `.env` raíz)
+
+| Variable | Dev | Prod | Propósito |
+| :--- | :--- | :--- | :--- |
+| `FRONTEND_URL` | *(vacío)* | `https://pegasoexpediciones.com` | Añadida dinámicamente a la whitelist CORS en `cors.php`. Si está vacía, solo localhost es permitido. |
+| `JWT_SECRET` | secreto local | secreto prod (≥ 32 chars) | Firma HS256 de los JWT. Nunca igual en dev y prod. |
+| `PAYPAL_MODE` | `sandbox` | `live` | Fallback si `paypal_mode` no está en `system_settings`. |
+| `PAYPAL_CLIENT_ID` | ID sandbox | ID live | Fallback si `paypal_client_id_{mode}` no está en `system_settings`. |
+| `PAYPAL_CLIENT_SECRET` | Secret sandbox | Secret live | Fallback si `paypal_secret_{mode}` no está en `system_settings`. |
+
+### Variables de entorno del Frontend (Next.js)
+
+| Variable | Dev (`.env.local`) | Prod (`.env.production` + GitHub Actions) | Propósito |
+| :--- | :--- | :--- | :--- |
+| `NEXT_PUBLIC_API_URL` | `http://localhost/PegasoExpedicionesDev/api` | `https://pegasoexpediciones.com/api` | URL base de todos los `fetch` al backend. **Horneada en el bundle estático en tiempo de build.** |
+| `NEXT_PUBLIC_PAYPAL_MODE` | `sandbox` | `live` | Modo PayPal para el SDK del frontend. |
+| `NEXT_PUBLIC_CONTACT_PHONE` | `521XXXXXXXXXX` | `521XXXXXXXXXX` | Número de WhatsApp de contacto (fallback si BD no responde). |
+
+> **Regla crítica — "Localhost Leak":** `NEXT_PUBLIC_*` se hornean (bake) en el HTML/JS estático durante `npm run build`. Si el build se ejecuta sin inyectar las variables de producción, el bundle quedará con `http://localhost/...` hardcodeado para siempre. **Solución:** GitHub Actions inyecta explícitamente `NEXT_PUBLIC_API_URL=https://pegasoexpediciones.com/api` en el step de build (ver `main-deploy.yml`).
+
+### Arquitectura CORS — `api/cors.php`
+
+```
+Toda petición cross-origin a cualquier endpoint PHP:
+  └─ require_once 'cors.php'   ← primera línea de cada endpoint
+       ├─ Lee FRONTEND_URL del .env
+       ├─ Whitelist: localhost (dev) + FRONTEND_URL (prod)
+       ├─ Si origin NO está en whitelist → NO emite Allow-Origin → navegador bloquea
+       ├─ OPTIONS preflight → 204 No Content (sin tocar DB)
+       └─ Allow-Headers incluye Authorization (requerido para JWT)
+```
+
+> **Anti-patrón eliminado:** Los 10 endpoints PHP tenían su propia copia del bloque CORS con localhost hardcodeado. Ahora todos delegan en `cors.php` — un único punto de cambio para añadir dominios.
+
+### Despliegue en subdirectorio `/portal`
+
+```
+Servidor de producción:
+  public_html/
+  ├─ (sitio web existente del cliente — intacto)
+  ├─ api/          ← PHP backend
+  └─ portal/       ← Next.js compilado (basePath=/portal)
+       └─ .htaccess  ← copiado de booking-engine/public/ por Next.js build
+```
+
+- `basePath: '/portal'` y `assetPrefix: '/portal'` en `next.config.mjs`
+- `booking-engine/public/.htaccess` se copia a `out/` automáticamente
+- GitHub Actions: `mv booking-engine/out ./portal` antes del FTP sync
+
+---
+
 ## 🧠 LÓGICA DE NEGOCIO (REGLAS DE PIEDRA)
 
 1. **Precio Canónico (Regla de Oro):** `total_pagado` se calcula EXCLUSIVAMENTE en `crear_orden_paypal.php` como `precio × num_lugares`, leyendo `precio` de `expediciones` en DB. El frontend NUNCA envía ni sugiere el precio.

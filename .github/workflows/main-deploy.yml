@@ -12,19 +12,27 @@ jobs:
     steps:
     - name: 🚚 Get latest code
       uses: actions/checkout@v4
-      
+
     - name: ⚙️ Setup Node.js (Para Next.js)
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        
+
     - name: 🛠️ Compilar Booking Engine (Next.js)
+      env:
+        # Inyectar variables de producción en tiempo de build.
+        # Next.js hornea NEXT_PUBLIC_* en el bundle estático —
+        # si no se inyectan aquí, el build usará los valores de
+        # .env.local (localhost) y se producirá un "localhost leak".
+        NEXT_PUBLIC_API_URL: https://pegasoexpediciones.com/api
+        NEXT_PUBLIC_PAYPAL_MODE: live
+        NEXT_PUBLIC_CONTACT_PHONE: "521XXXXXXXXXX"
       run: |
         cd booking-engine
         npm install
         npm run build
         cd ..
-        # Movemos la carpeta compilada "out" a una carpeta llamada "portal" para subirla
+        # Mover la carpeta compilada "out" a "portal" para subirla como subdirectorio
         mv booking-engine/out ./portal
 
     - name: 📂 Sync files to FTP
@@ -36,12 +44,14 @@ jobs:
         port: 21
         protocol: ftps
         server-dir: public_html/
-        # Excluimos el código fuente de Next.js, solo subimos la versión compilada en "portal"
+        # Solo subir: el código PHP en api/, y el frontend compilado en portal/
+        # Excluir: código fuente de Next.js, knowledge/, archivos de entorno
         exclude: |
           **/.git*
           **/.git*/**
           **/.github*/**
           README.md
           .gitignore
+          .env*
           booking-engine/**
           knowledge/**

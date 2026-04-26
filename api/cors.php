@@ -5,41 +5,87 @@ declare(strict_types=1);
 /**
  * cors.php — Gestor centralizado de CORS.
  *
- * INCLUIR al inicio de CADA endpoint PHP antes de cualquier output.
- * Mandamiento #14: CORS ≠ Autenticación. Este archivo solo gestiona las
- * cabeceras de acceso cross-origin; la autenticación va en cada endpoint.
+ * INCLUIR como PRIMERA instrucción de cada endpoint PHP, antes de cualquier
+ * require_once o lógica que pueda fallar — garantiza que el navegador siempre
+ * reciba los headers CORS aunque un require posterior crashee.
  *
- * Para producción: añadir el dominio real a $allowedOrigins y eliminar localhost.
+ * Orígenes permitidos:
+ *   - Localhost (desarrollo local)
+ *   - FRONTEND_URL del .env del servidor (producción)
+ *
+ * En producción: añadir FRONTEND_URL=https://pegasoexpediciones.com al .env
  */
 
-$allowedOrigins = [
+// ── Leer FRONTEND_URL del .env (parser inline sin dependencias) ──
+// No usamos Database::loadEnv() para evitar require_once aquí.
+$_corsEnvPath    = dirname(__DIR__) . '/.env';
+$_corsFrontendUrl = '';
+
+if (is_readable($_corsEnvPath)) {
+    foreach (file($_corsEnvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $_corsLine) {
+        $_corsLine = trim($_corsLine);
+        if ($_corsLine === '' || $_corsLine[0] === '#') {
+            continue;
+        }
+        $_corsPos = strpos($_corsLine, '=');
+        if ($_corsPos === false) {
+            continue;
+        }
+        if (trim(substr($_corsLine, 0, $_corsPos)) !== 'FRONTEND_URL') {
+            continue;
+        }
+        $_corsVal = trim(substr($_corsLine, $_corsPos + 1));
+        $_corsLen = strlen($_corsVal);
+        if ($_corsLen >= 2) {
+            $_corsFirst = $_corsVal[0];
+            $_corsLast  = $_corsVal[$_corsLen - 1];
+            if (($_corsFirst === '"' && $_corsLast === '"') || ($_corsFirst === "'" && $_corsLast === "'")) {
+                $_corsVal = substr($_corsVal, 1, $_corsLen - 2);
+            }
+        }
+        $_corsFrontendUrl = $_corsVal;
+        break;
+    }
+}
+
+unset($_corsEnvPath, $_corsLine, $_corsPos, $_corsVal, $_corsLen, $_corsFirst, $_corsLast);
+
+// ── Whitelist de orígenes permitidos ─────────────────────────────
+$_corsAllowed = [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
 ];
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+// Añadir la URL de producción si está configurada en .env
+if ($_corsFrontendUrl !== '') {
+    $_corsAllowed[] = $_corsFrontendUrl;
+}
 
-// Whitelist estricta: solo permite orígenes conocidos.
-// Devuelve el origin solicitado (para cookies+credentials futuros) o el primero de la lista.
-$allowOrigin = in_array($origin, $allowedOrigins, true)
-    ? $origin
-    : $allowedOrigins[0];
+unset($_corsFrontendUrl);
 
-header("Access-Control-Allow-Origin: {$allowOrigin}");
+// ── Emitir headers CORS ───────────────────────────────────────────
+$_corsOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+// Solo enviar Allow-Origin si el origen está en la whitelist.
+// Para orígenes desconocidos NO emitimos el header → el navegador bloquea solo.
+if (in_array($_corsOrigin, $_corsAllowed, true)) {
+    header("Access-Control-Allow-Origin: {$_corsOrigin}");
+}
+
+// Authorization: requerido para endpoints con JWT (Bearer token)
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-// Cache-Control debe estar aquí: fetch({ cache:"no-store" }) lo añade al request
-// y Chrome lo incluye en Access-Control-Request-Headers del preflight.
-// Sin él, el preflight falla aunque el backend funcione perfectamente.
-header('Access-Control-Allow-Headers: Content-Type, Accept, Cache-Control');
-header('Access-Control-Max-Age: 86400');   // Cache el preflight 24 h
-header('Vary: Origin');                    // CDN / proxies: variar cache por Origin
+header('Access-Control-Allow-Headers: Content-Type, Accept, Cache-Control, Authorization');
+header('Access-Control-Max-Age: 86400');  // Cache preflight 24 h
+header('Vary: Origin');
 
-// ── Preflight OPTIONS ─────────────────────────────────────────
-// El navegador envía OPTIONS antes de cualquier POST cross-origin.
-// Respondemos 200 inmediatamente, sin tocar la DB ni ejecutar lógica.
+unset($_corsAllowed, $_corsOrigin);
+
+// ── Preflight OPTIONS ─────────────────────────────────────────────
+// El navegador envía OPTIONS antes de cualquier POST/GET cross-origin.
+// Respondemos 204 (No Content) sin tocar la DB ni lógica de negocio.
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit();
 }

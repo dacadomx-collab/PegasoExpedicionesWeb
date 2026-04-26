@@ -37,5 +37,21 @@ pegaso_user_db
 pass: HiPAzD[k*fe~b-fs
 
 ********************************************
-
+	PayPal	Sandbox
 ********************************************
+Sandbox URL
+https://sandbox.paypal.com
+
+Email
+sb-1nkh050825129@personal.example.com
+
+Password: u*^4Q{|@
+••••••••••••••••
+Sandbox account info
+Name
+John Doe
+••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••https://pegasoexpediciones.com/portal/admin/login/
+User: dacadomx@gmail.com
+Pass: Acadep2026!
+••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+

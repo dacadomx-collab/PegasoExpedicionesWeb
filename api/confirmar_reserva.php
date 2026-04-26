@@ -11,23 +11,8 @@ declare(strict_types=1);
  * Idempotente: un order_id ya 'completed' devuelve 422.
  */
 
-// ── CORS inline primero (ver crear_orden_paypal.php para justificación) ───
-$_corsAllowed = [
-    'http://localhost:3000', 'http://localhost:3001',
-    'http://127.0.0.1:3000', 'http://127.0.0.1:3001',
-];
-$_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-header('Access-Control-Allow-Origin: ' . (in_array($_origin, $_corsAllowed, true) ? $_origin : $_corsAllowed[0]));
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Accept, Cache-Control');
+require_once __DIR__ . '/cors.php';
 header('Content-Type: application/json; charset=utf-8');
-header('Vary: Origin');
-unset($_corsAllowed, $_origin);
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
 
 // ── Shutdown handler para Fatal Errors ────────────────────────
 register_shutdown_function(static function (): void {

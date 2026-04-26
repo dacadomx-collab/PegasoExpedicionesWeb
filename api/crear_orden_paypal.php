@@ -16,33 +16,13 @@ declare(strict_types=1);
  */
 
 // ═══════════════════════════════════════════════════════════════
-// BLOQUE 1 — CABECERAS CORS (primer output del script)
-// Deben estar ANTES de cualquier require_once para que, si algo
-// crashea después, el navegador ya tenga los headers CORS y no
-// malinterprete el error 500 de Apache como un problema de CORS.
+// BLOQUE 1 — CORS (primer output, antes de cualquier require_once)
+// cors.php solo usa file() sobre .env — sin require ni clases.
+// Si algo crashea DESPUÉS, el navegador ya tiene los headers CORS
+// y no confunde el error 500 de Apache con un problema de CORS.
 // ═══════════════════════════════════════════════════════════════
-
-$_corsAllowed = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-];
-$_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-header('Access-Control-Allow-Origin: ' . (in_array($_origin, $_corsAllowed, true) ? $_origin : $_corsAllowed[0]));
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-// Cache-Control: apiFetch usa cache:"no-store" → Chrome lo pone en el preflight.
-// Sin este header el preflight falla y el browser reporta CORS aunque el backend esté bien.
-header('Access-Control-Allow-Headers: Content-Type, Accept, Cache-Control');
+require_once __DIR__ . '/cors.php';
 header('Content-Type: application/json; charset=utf-8');
-header('Vary: Origin');
-unset($_corsAllowed, $_origin);
-
-// OPTIONS preflight — responder 200 inmediatamente, sin DB ni lógica
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
 
 // ═══════════════════════════════════════════════════════════════
 // BLOQUE 2 — SHUTDOWN HANDLER (red de seguridad para Fatal Errors)
