@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /portal/
+
+    # Si el archivo existe físicamente, sírvelo
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Si la ruta + .html existe, sírvela
+    RewriteCond %{REQUEST_FILENAME}.html -f
+    RewriteRule ^(.*)$ $1.html [L]
+
+    # Fallback al index para el App Router de Next.js
+    RewriteRule ^ index.html [L]
+</IfModule>
