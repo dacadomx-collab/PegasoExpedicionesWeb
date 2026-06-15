@@ -11,3 +11,6 @@ node_modules/
 # Archivos del sistema operativo
 .DS_Store
 Thumbs.db
+
+# Archivos de malware/virus - NUNCA subir al repositorio
+BackUp_VIRUS/

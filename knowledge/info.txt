@@ -1,11 +1,10 @@
 https://pegasoexpediciones.com/
 
-
 https://github.com/dacadomx-collab/PegasoExpedicionesWeb.git
 
 C:\xampp\htdocs\PegasoExpedicionesDev
-************************************************************************************************************* Ejecutar Servidor ******* 
-******************************************************************************************************
+*******************************************************************  Ejecutar Servidor  **
+***************************
 cd booking-engine
 Correr servidor
 npm run dev
@@ -21,24 +20,32 @@ Simulador real local un mini-servidor local de producción:
 npx serve out
 Te dará un enlace (ej. http://localhost:3000)
 
-***********************************************************************************************		 FTP 		********************************************
-********************************************
+*******************************************************************  FTP  **
+*************
 Nombre de usuario de FTP: ftp_user@pegasoexpediciones.com
 pass: sv($~)twT@uQrkE@
 Servidor FTP: ftp.pegasoexpediciones.com
 Puerto FTPS explícito de FTP &:  21
 
-***********************************************************************************************		 DataBase 	************
-********************************************
-********************************************
+
+
+user: despliegue@pegasoexpediciones.com
+pass: ,#Cn9zYX2W(2=-}n
+
+user: ftp_user@pegasoexpediciones.com
+pass: ZmY?3!O1tUgx+fuv
+
+
+*******************************************************************  DataBase  **
+******************
 Base de datos: pegaso_web_services_DB
 Usuarios con privilegio: 	
 pegaso_user_db
-pass: HiPAzD[k*fe~b-fs
+pass: uyT^{mqLAPZ=.;T@
 
-********************************************
-	PayPal	Sandbox
-********************************************
+***************************************************************
+****  PayPal	Sandbox  **
+***************************
 Sandbox URL
 https://sandbox.paypal.com
 
