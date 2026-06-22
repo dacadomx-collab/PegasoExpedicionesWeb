@@ -38,12 +38,29 @@ jobs:
     - name: 📂 Sync files to FTP
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
+        # Credenciales SIEMPRE desde GitHub Secrets — Mandamiento #12 (Bóveda de
+        # Secretos). Nunca quemar host/usuario/password en este archivo versionado.
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
         port: 21
         protocol: ftps
-        server-dir: public_html/
+        # ⚠️ ENJAULADO cPanel (causa raíz del error 421 — 2026-06-22):
+        # La cuenta FTP de secrets.FTP_USERNAME está enjaulada por cPanel en
+        # /home/pegaso/public_html/despliegue. Para un FTP enjaulado, ese
+        # directorio jaula ES la raíz "/" que ve la conexión — NO existe un
+        # "public_html/" navegable dentro de su propia jaula salvo que sea
+        # un symlink. Usar "public_html/" aquí intentaba aterrizar en
+        # .../despliegue/public_html/ (inexistente) → 421.
+        # server-dir SIEMPRE debe ser "./" mientras se use esta cuenta enjaulada.
+        #
+        # Si en el futuro se decide subir directo a la raíz real de
+        # public_html/ (no a la subcarpeta despliegue/), el cambio NO es
+        # aquí: hay que pedirle a cPanel (File Manager → FTP Accounts) una
+        # cuenta cuyo "Directory" sea public_html/ directamente. El YAML
+        # se queda igual (server-dir: ./) porque el enjaulado siempre
+        # expone su propio home como raíz "/".
+        server-dir: ./
         # Solo subir: el código PHP en api/, y el frontend compilado en portal/
         # Excluir: código fuente de Next.js, knowledge/, archivos de entorno
         exclude: |

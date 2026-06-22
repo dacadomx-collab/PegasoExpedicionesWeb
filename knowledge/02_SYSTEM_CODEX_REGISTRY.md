@@ -458,6 +458,22 @@ interface Tour {
 
 ---
 
+## 🚀 INFRAESTRUCTURA CI/CD — FIX FTP 421 (2026-06-22)
+
+> **Archivo:** `.github/workflows/main-deploy.yml` — acción `SamKirkland/FTP-Deploy-Action@v4.3.5`.
+
+**Causa raíz del error 421:** la cuenta FTP `despliegue@pegasoexpediciones.com` está **enjaulada (chrooted) por cPanel** en `/home/pegaso/public_html/despliegue`. Una cuenta FTP enjaulada ve su propio directorio home como la raíz `/` de la conexión — no existe un `public_html/` navegable dentro de su propia jaula. El workflow tenía `server-dir: public_html/`, lo cual intentaba aterrizar en `.../despliegue/public_html/` (ruta inexistente) → fallo de conexión/path.
+
+**Fix aplicado:** `server-dir: ./` — sube siempre a la raíz que el FTP enjaulado expone, sin importar cuál sea físicamente esa carpeta en el servidor.
+
+**Regla para el futuro (si se decide deployar directo a la raíz real de `public_html/`):** el cambio NO se hace en este YAML. Se gestiona desde cPanel → File Manager → Cuentas FTP, creando/editando la cuenta para que su "Directory" sea `public_html/` directamente. El parámetro `server-dir: ./` del workflow se queda igual — el enjaulado siempre expone su propio home como `/`.
+
+**Secrets:** `server`, `username`, `password` siguen viniendo de `${{ secrets.FTP_SERVER }}`, `${{ secrets.FTP_USERNAME }}`, `${{ secrets.FTP_PASSWORD }}` (Mandamiento #12, Bóveda de Secretos). Sin cambios — ya cumplía.
+
+⚠️ **Hallazgo colateral (fuera de alcance de este fix, reportar al Arquitecto):** `knowledge/info.txt` contiene credenciales reales en texto plano (FTP, BD, PayPal sandbox, login del portal admin) dentro de un archivo del repositorio. Aunque `.htaccess` bloquea `.md`/`.sql`/`.env`, **no bloquea `.txt`** — y de cualquier forma nunca debería vivir en el repo versionado. Recomendado: rotar esas credenciales y mover el contenido a un gestor de secretos fuera de Git.
+
+---
+
 ## 🖨️ MÓDULO: `catalog_services` — Landing Print-First (2026-06-22)
 
 > **Contexto:** Página estática `catalogo.html` (catálogo/póster imprimible). NO consume la BD ni la API PHP — es contenido de marketing 100% estático, fuera del flujo de reservas/PayPal. Vive en su propia carpeta `css/` y `js/` en la raíz del proyecto (separada de `assets/css` y `assets/js` del sitio principal) porque es una pieza independiente, no una vista del sitio Bootstrap existente.
