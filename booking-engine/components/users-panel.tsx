@@ -7,7 +7,7 @@ import { z } from "zod"
 import {
   UserPlus, Users, ShieldCheck, Loader2, AlertCircle,
   Eye, EyeOff, CheckCircle, XCircle, RefreshCw,
-  Crown, Briefcase, TrendingUp,
+  Crown, Briefcase, TrendingUp, Handshake,
 } from "lucide-react"
 import { useAdminUsers } from "@/hooks/use-admin-users"
 import type { AdminRole } from "@/lib/types"
@@ -35,6 +35,13 @@ const ROLES: Record<AdminRole, { label: string; description: string; icon: React
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
     dot:   "bg-emerald-500",
   },
+  partner: {
+    label: "Partner",
+    description: "Portal AXON DCD: Partner Academy, sin acceso al dashboard de reservas",
+    icon: Handshake,
+    badge: "bg-teal-50 text-teal-700 border-teal-200",
+    dot:   "bg-teal-500",
+  },
 }
 
 // ── Zod schema ────────────────────────────────────────────────
@@ -42,7 +49,7 @@ const schema = z.object({
   name:     z.string().trim().min(3, "Mínimo 3 caracteres"),
   email:    z.string().trim().email("Correo inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
-  role:     z.enum(["super_admin", "operaciones", "ventas"]),
+  role:     z.enum(["super_admin", "operaciones", "ventas", "partner"]),
 })
 type FormData = z.infer<typeof schema>
 
@@ -113,6 +120,7 @@ export function UsersPanel({ token, currentUserId }: UsersPanelProps) {
     super_admin: "bg-[#f26d52]",
     operaciones: "bg-blue-500",
     ventas:      "bg-emerald-500",
+    partner:     "bg-teal-500",
   }
 
   return (
@@ -229,7 +237,7 @@ export function UsersPanel({ token, currentUserId }: UsersPanelProps) {
             </div>
 
             {/* Descripción de permisos */}
-            <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
               {(Object.entries(ROLES) as [AdminRole, typeof ROLES[AdminRole]][]).map(([key, { label, description, icon: Icon, badge }]) => (
                 <div key={key} className={`rounded-xl border px-3 py-2.5 ${badge}`}>
                   <div className="flex items-center gap-1.5 mb-0.5">

@@ -470,6 +470,22 @@ interface Tour {
 
 **Secrets:** `server`, `username`, `password` siguen viniendo de `${{ secrets.FTP_SERVER }}`, `${{ secrets.FTP_USERNAME }}`, `${{ secrets.FTP_PASSWORD }}` (Mandamiento #12, Bóveda de Secretos). Sin cambios — ya cumplía.
 
+### 🛠️ FIX: `next build` roto por `AdminRole` incompleto en `users-panel.tsx` (2026-06-22)
+
+**Causa raíz:** `AdminRole` se extendió a `"super_admin" | "operaciones" | "ventas" | "partner"` en Fase 7 (2026-06-16, Portal AXON DCD) — ver `lib/types.ts:83`. `booking-engine/components/users-panel.tsx` nunca se actualizó: `ROLES` (`Record<AdminRole, …>`) y `AVATAR_BG` (`Record<AdminRole, string>`) seguían con solo 3 claves → TypeScript estricto rompe el build (`next build` corre `tsc` antes de generar páginas).
+
+**Fix aplicado:**
+- `ROLES.partner` agregado: `label: "Partner"`, `description: "Portal AXON DCD: Partner Academy, sin acceso al dashboard de reservas"` (descripción real, alineada con `admin-dashboard.tsx` — `isPartner` oculta el tab Dashboard y el `ASFLWidget`, redirige a `academia`), `icon: Handshake` (lucide-react, nuevo import), `badge`/`dot` en paleta teal (sin colisión con los 3 roles existentes).
+- `AVATAR_BG.partner` agregado: `bg-teal-500`.
+- `schema.role` (zod) ahora acepta `"partner"` — si no, el formulario de alta de admin rechazaría ese rol con un 422 silencioso en frontend.
+- Grid de "Descripción de permisos" (antes `grid-cols-3` fijo para 3 roles) cambiado a `grid-cols-2 sm:grid-cols-4` para acomodar las 4 tarjetas sin overflow visual.
+
+**Validado:** `npx tsc --noEmit` limpio y `npm run build` (`next build`) completa exitosamente generando las 4 rutas estáticas (`/`, `/_not-found`, `/academy`, `/admin/login`).
+
+> **Regla para el futuro:** cualquier extensión de `AdminRole` en `lib/types.ts` DEBE acompañarse de la actualización simultánea de `ROLES` y `AVATAR_BG` en `users-panel.tsx` — TypeScript ya fuerza esto vía `Record<AdminRole, …>`, pero ambos deben corregirse a la vez para que el contrato de roles no se desincronice silenciosamente otra vez.
+
+---
+
 ⚠️ **Hallazgo colateral (fuera de alcance de este fix, reportar al Arquitecto):** `knowledge/info.txt` contiene credenciales reales en texto plano (FTP, BD, PayPal sandbox, login del portal admin) dentro de un archivo del repositorio. Aunque `.htaccess` bloquea `.md`/`.sql`/`.env`, **no bloquea `.txt`** — y de cualquier forma nunca debería vivir en el repo versionado. Recomendado: rotar esas credenciales y mover el contenido a un gestor de secretos fuera de Git.
 
 ---
