@@ -1,8 +1,11 @@
 https://pegasoexpediciones.com/
 
+http://localhost/PegasoExpedicionesDev/
+
 https://github.com/dacadomx-collab/PegasoExpedicionesWeb.git
 
 C:\xampp\htdocs\PegasoExpedicionesDev
+
 *******************************************************************  Ejecutar Servidor  **
 ***************************
 cd booking-engine
@@ -23,19 +26,14 @@ Te dará un enlace (ej. http://localhost:3000)
 *******************************************************************  FTP  **
 *************
 Nombre de usuario de FTP: ftp_user@pegasoexpediciones.com
-pass: sv($~)twT@uQrkE@
 Servidor FTP: ftp.pegasoexpediciones.com
 Puerto FTPS explícito de FTP &:  21
-
-
 
 user: despliegue@pegasoexpediciones.com
 pass: ,#Cn9zYX2W(2=-}n
 
 user: ftp_user@pegasoexpediciones.com
 pass: ZmY?3!O1tUgx+fuv
-
-
 *******************************************************************  DataBase  **
 ******************
 Base de datos: pegaso_web_services_DB

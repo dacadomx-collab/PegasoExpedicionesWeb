@@ -79,7 +79,8 @@ export interface BookingConfirmation {
 
 // ── FASE 5: RBAC (2026-04-24) ────────────────────────────────
 // Roles canónicos — deben coincidir con los valores en admin_users.role (DB)
-export type AdminRole = "super_admin" | "operaciones" | "ventas"
+// 'partner' agregado en Fase 7 (2026-06-16) — Portal AXON DCD
+export type AdminRole = "super_admin" | "operaciones" | "ventas" | "partner"
 
 export interface AdminUser {
   id:            number
@@ -144,6 +145,21 @@ export interface SaveExpeditionPayload {
   image_url:      string
   status:         "active" | "inactive"
   custom_fields:  CustomFieldEntry[]
+}
+
+// ── FASE 7: Partner Welcome (2026-06-16) ─────────────────────
+// Contrato: GET /api/welcome_status.php
+
+export interface WelcomeStatus {
+  has_seen_welcome: boolean
+  fecha_fundacion:  string | null  // "YYYY-MM-DD HH:MM:SS" | null
+  partner_name:     string
+  role:             AdminRole
+}
+
+export interface SetWelcomeSeenResponse {
+  fecha_fundacion: string
+  already_set:     boolean
 }
 
 // ── Payload de crear orden (Front → Back) ─────────────────────

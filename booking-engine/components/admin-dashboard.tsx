@@ -9,8 +9,12 @@ import {
   MessageCircle, XCircle, Bell, Users, AlertCircle, Loader2,
   TrendingUp, DollarSign, Clock, ExternalLink, Calendar,
   ChevronRight, RefreshCw, ShieldOff, ShieldCheck, Download,
-  Settings, LogOut,
+  Settings, LogOut, BookOpen,
 } from "lucide-react"
+import { WelcomeCard }           from "@/components/welcome-card"
+import { AsflWidget }            from "@/components/asfl-widget"
+import AcademyContent            from "@/app/academy/page"
+import { fetchWelcomeStatus }    from "@/lib/api"
 import { Badge }   from "@/components/ui/badge"
 import { Button }  from "@/components/ui/button"
 import { Input }   from "@/components/ui/input"
@@ -32,7 +36,7 @@ import { UsersPanel }         from "@/components/users-panel"
 import { ExpeditionsPanel }   from "@/components/expeditions-panel"
 import type { PaymentStatus, BookingAdminView } from "@/lib/types"
 
-type DashboardTab = "reservas" | "configuracion" | "usuarios" | "expediciones"
+type DashboardTab = "reservas" | "configuracion" | "usuarios" | "expediciones" | "academia"
 
 // ── Config ────────────────────────────────────────────────────
 const PAYPAL_MODE = process.env.NEXT_PUBLIC_PAYPAL_MODE ?? "sandbox"
@@ -105,7 +109,20 @@ export function AdminDashboard() {
   const { bookings, isLoading, error, retry } = useBookings()
   const { expeditions }                        = useExpeditions()
   const { isPaused, togglePause, isReady: pauseReady } = useSalesPause()
-  const { token, adminName, adminEmail, isAuthenticated, isSuperAdmin, isReady: authReady, logout } = useAuth()
+  const { token, adminName, adminEmail, adminRole, isAuthenticated, isSuperAdmin, isReady: authReady, logout } = useAuth()
+  const isPartner = adminRole === "partner"
+
+  // ── Welcome gate para partners ───────────────────────────────
+  const [showWelcome,    setShowWelcome]    = useState(false)
+  const [welcomeChecked, setWelcomeChecked] = useState(false)
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !token || !isPartner || welcomeChecked) return
+    fetchWelcomeStatus(token)
+      .then((status) => { if (!status.has_seen_welcome) setShowWelcome(true) })
+      .catch(() => { /* fallo silencioso — no bloquear el dashboard */ })
+      .finally(() => setWelcomeChecked(true))
+  }, [authReady, isAuthenticated, token, isPartner, welcomeChecked])
   // Extraer ID del admin desde el JWT (para UsersPanel — evitar auto-desactivación)
   const currentAdminId = token
     ? (() => { try { const p = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); return (p as { sub?: number }).sub ?? 0 } catch { return 0 } })()
@@ -188,6 +205,28 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#fcfaf5] flex">
+      {/* ── Welcome Gate — solo partner con fecha_fundacion NULL ── */}
+      {showWelcome && token && adminName && (
+        <WelcomeCard
+          partnerName={adminName}
+          token={token}
+          onContinue={() => {
+            setShowWelcome(false)
+            // Partners van a Academia tras la primera bienvenida
+            setActiveTab("academia")
+          }}
+        />
+      )}
+
+      {/* ASFL Widget — oculto para partner; super_admin lo ve por defecto */}
+      {adminRole && adminEmail && adminName && (
+        <AsflWidget
+          role={adminRole}
+          userEmail={adminEmail}
+          userName={adminName}
+        />
+      )}
+
       {/* Overlay mobile */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -213,10 +252,11 @@ export function AdminDashboard() {
 
         <nav className="flex-1 p-4 space-y-1">
           {([
-            { icon: LayoutDashboard, label: "Dashboard",     tab: "reservas" as const,      show: true         },
-            { icon: MapPin,          label: "Expediciones",  tab: "expediciones" as const,  show: isSuperAdmin },
-            { icon: Settings,        label: "Configuración", tab: "configuracion" as const, show: isSuperAdmin },
-            { icon: Users,           label: "Usuarios",      tab: "usuarios" as const,      show: isSuperAdmin },
+            { icon: LayoutDashboard, label: "Dashboard",     tab: "reservas" as const,      show: !isPartner       },
+            { icon: BookOpen,         label: "Academia",      tab: "academia" as const,      show: true             },
+            { icon: MapPin,          label: "Expediciones",  tab: "expediciones" as const,  show: isSuperAdmin     },
+            { icon: Settings,        label: "Configuración", tab: "configuracion" as const, show: isSuperAdmin     },
+            { icon: Users,           label: "Usuarios",      tab: "usuarios" as const,      show: isSuperAdmin     },
           ]).filter(({ show }) => show).map(({ icon: Icon, label, tab }) => (
             <button key={label}
               onClick={() => { setActiveTab(tab); setSidebarOpen(false) }}
@@ -258,10 +298,10 @@ export function AdminDashboard() {
             </button>
             <div>
               <h2 className="font-serif text-xl lg:text-2xl font-bold text-[#0f0200]">
-                {{ reservas: "Dashboard", configuracion: "Configuración", usuarios: "Usuarios", expediciones: "Expediciones" }[activeTab]}
+                {{ reservas: "Dashboard", configuracion: "Configuración", usuarios: "Usuarios", expediciones: "Expediciones", academia: "Partner Academy" }[activeTab]}
               </h2>
               <p className="text-xs text-[#4c4c4c] hidden sm:block">
-                {{ reservas: "Centro de Mando · Pegaso Expediciones", configuracion: "Variables del sistema · PayPal · WhatsApp", usuarios: "RBAC · Control de Acceso Basado en Roles", expediciones: "Catálogo dinámico · Condiciones y cupos" }[activeTab]}
+                {{ reservas: "Centro de Mando · Pegaso Expediciones", configuracion: "Variables del sistema · PayPal · WhatsApp", usuarios: "RBAC · Control de Acceso Basado en Roles", expediciones: "Catálogo dinámico · Condiciones y cupos", academia: "Tus motores de inicio · Ecosistema AXON DCD" }[activeTab]}
               </p>
             </div>
           </div>
@@ -280,6 +320,13 @@ export function AdminDashboard() {
         </header>
 
         <div className="flex-1 p-4 lg:p-8 overflow-auto space-y-6">
+
+          {/* ── Pestaña: Academia (todos los roles) ── */}
+          {activeTab === "academia" && (
+            <div className="-m-4 lg:-m-8">
+              <AcademyContent />
+            </div>
+          )}
 
           {/* ── Pestaña: Expediciones (super_admin only) ── */}
           {activeTab === "expediciones" && isSuperAdmin && token && (

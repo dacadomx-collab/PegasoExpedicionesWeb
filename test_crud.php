@@ -40,16 +40,59 @@ function warn(string $msg): void
 
 // ── Guardia de entorno ────────────────────────────────────────────────────────
 
-$envRaw = [];
-foreach (file(__DIR__ . '/.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-    $line = trim($line);
-    if ($line === '' || $line[0] === '#') continue;
-    [$k, $v] = array_pad(explode('=', $line, 2), 2, '');
-    $envRaw[trim($k)] = trim($v, " \t\"'");
+$envPath = __DIR__ . '/.env';
+
+if (!file_exists($envPath)) {
+    echo "\033[33m[DEBUG]\033[0m .env no encontrado en: {$envPath}\n";
+    echo "\033[33m[DEBUG]\033[0m __DIR__ resuelve a: " . __DIR__ . "\n";
+    echo "\033[33m[DEBUG]\033[0m Archivos en directorio raíz:\n";
+    foreach (array_slice(scandir(__DIR__), 0, 20) as $f) {
+        echo "          {$f}\n";
+    }
+    die("\033[31m[ABORTADO]\033[0m Archivo .env ausente. Crea uno con APP_ENV=local antes de ejecutar este test.\n");
 }
 
-if (($envRaw['APP_ENV'] ?? '') !== 'local') {
-    die("\033[31m[ABORTADO]\033[0m Solo se ejecuta con APP_ENV=local.\n");
+$envRaw = [];
+$rawLines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+if ($rawLines === false) {
+    die("\033[31m[ABORTADO]\033[0m No se pudo leer el archivo .env (¿permisos incorrectos?).\n");
+}
+
+foreach ($rawLines as $line) {
+    // Strip Windows \r carriage returns that survive FILE_IGNORE_NEW_LINES on some PHP builds
+    $line = rtrim($line, "\r\n");
+    $line = trim($line);
+
+    // Skip blank lines and comments
+    if ($line === '' || $line[0] === '#') {
+        continue;
+    }
+
+    // Only process lines that contain '='
+    if (strpos($line, '=') === false) {
+        continue;
+    }
+
+    [$k, $v] = array_pad(explode('=', $line, 2), 2, '');
+    $k = trim($k);
+    // Remove surrounding quotes (single or double) and trailing whitespace/comments
+    $v = trim($v);
+    $v = preg_replace('/\s+#.*$/', '', $v);   // strip inline comments: KEY=value # comment
+    $v = trim($v, "\"'");                      // strip wrapping quotes
+    $v = trim($v);                             // final whitespace pass
+
+    if ($k !== '') {
+        $envRaw[$k] = $v;
+    }
+}
+
+$detectedEnv = $envRaw['APP_ENV'] ?? '(not set)';
+
+if ($detectedEnv !== 'local') {
+    echo "\033[33m[DEBUG]\033[0m APP_ENV detectado como: \"{$detectedEnv}\"\n";
+    echo "\033[33m[DEBUG]\033[0m Claves encontradas en .env: " . implode(', ', array_keys($envRaw)) . "\n";
+    die("\033[31m[ABORTADO]\033[0m Solo se ejecuta con APP_ENV=local. Valor actual: \"{$detectedEnv}\"\n");
 }
 
 // ── Conexión ──────────────────────────────────────────────────────────────────

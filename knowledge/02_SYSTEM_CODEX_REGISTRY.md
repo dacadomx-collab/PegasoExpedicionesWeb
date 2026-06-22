@@ -455,3 +455,52 @@ interface Tour {
 | DT-04 | `booking-widget.tsx` | Sin validación Zod en el formulario (zod instalado pero sin usar) | Media |
 | DT-05 | `admin-dashboard.tsx` | `handleWhatsApp` usa `replace(/\s/g,'')` — no elimina `+` ni `-` del número | Baja |
 | DT-06 | `booking-widget.tsx` | Interfaz `Tour` no formalizada (inferida de array) | Baja |
+
+---
+
+## 🖨️ MÓDULO: `catalog_services` — Landing Print-First (2026-06-22)
+
+> **Contexto:** Página estática `catalogo.html` (catálogo/póster imprimible). NO consume la BD ni la API PHP — es contenido de marketing 100% estático, fuera del flujo de reservas/PayPal. Vive en su propia carpeta `css/` y `js/` en la raíz del proyecto (separada de `assets/css` y `assets/js` del sitio principal) porque es una pieza independiente, no una vista del sitio Bootstrap existente.
+
+| Concepto | Variable JS (`camelCase`) | Tipo | Regla |
+| :--- | :--- | :--- | :--- |
+| ID del servicio | `id` | STRING (kebab-case) | único, usado como `id` de anchor/print-break |
+| Nombre del servicio | `name` | STRING | título visible en la tarjeta |
+| Descripción breve | `description` | STRING | días/horario/detalle clave, máx ~120 chars |
+| Imagen del servicio | `image` | STRING | nombre de archivo dentro de `assets/images/` (rutas resueltas con `IMAGE_BASE_PATH`) |
+| Mensaje de WhatsApp | `whatsappMessage` | STRING | texto plano (SIN urlencode manual); el QR lo codifica dinámicamente con `encodeURIComponent` |
+
+**Constante de contacto:** `WHATSAPP_NUMBER` en `js/catalog-data.js` = `"526121480200"` (número real de Daniel, confirmado por el Arquitecto 2026-06-22). El mismo placeholder pendiente sigue abierto en `booking-engine` (`NEXT_PUBLIC_CONTACT_PHONE`) — no se tocó en esta entrega.
+
+**Imágenes finales (auditoría visual 2026-06-22 — confirmado, fuente de verdad para AXON DCD):**
+| Servicio | Constante `image` en `js/catalog-data.js` | Archivo real en `assets/images/` | Motivo de selección |
+| :--- | :--- | :--- | :--- |
+| Cabalgata al Atardecer | `Horseback_BG.jpg` | ✅ existe | Familia a caballo en playa al atardecer, alta conversión |
+| Nado con Tiburón Ballena | `explore-image2.jpg` | ✅ existe | Gráfico ya rotulado "WHALE SHARK SWIMMING" sobre foto real del animal |
+| Isla Espíritu Santo | `espiritu_santo_1.jpg` | ✅ existe | Snorkelers en caleta turquesa, más dinámica que `espiritu_santo_2.jpg` |
+| Kayak en el Mar de Cortés | `kayak3.jpg` | ✅ existe | Acción real de kayak en mar abierto (vs. `kayak1`/`kayak2` que muestran sombrilla de playa) |
+| Hiking Sierra de la Laguna | `hiking3.jpeg` | ✅ existe | Cascada y poza natural, la más vendedora de las 3 opciones de hiking |
+| Tour en Lancha a Balandra | `balandra1.jpg` | ✅ existe | La roca-hongo, ícono turístico reconocible de Playa Balandra |
+
+> ⚠️ **Pendiente real:** `tiburon_ballena` usa una imagen genérica rotulada, no una foto propia del tour Pegaso. Sustituir por foto real cuando el Arquitecto la proporcione.
+
+**Maquetación (corregido 2026-06-22 — bug de 4ta columna en desktop ultra-wide):** `.service-card` usa `flex`, `width` Y `max-width` **al mismo `calc(33.333% - gap)`** — los tres atados al mismo porcentaje, nunca un `max-width` en px independiente (esa era la causa del bug: un `max-width:380px` fijo dejaba hueco para una 4ª tarjeta en pantallas >1140px). Mobile-first: 2 columnas ≤979px (`calc(50% - gap)`), 1 columna ≤639px — cada breakpoint repite el patrón flex/width/max-width juntos. En `@media print` se repite el mismo patrón con `min-width: 0` (anula el `min-width:280px` base) para garantizar 3 tarjetas por fila en papel A4/Letter sin importar el viewport reducido del motor de impresión.
+
+**Botón de impresión:** `#print-catalog-btn` en `catalogo.html`, clase `.print-button` (paleta accent `--color-accent`), envuelto junto al lang-switcher en `.catalog-header__actions.no-print`. `js/catalog.js → bindPrintButton()` ejecuta `window.print()`. `.no-print { display: none !important; }` dentro de `@media print` en `css/main.css` oculta TODO el wrapper de acciones (impresión + idioma) en el papel.
+
+### i18n bilingüe EN/ES (2026-06-22)
+
+> **Idioma por defecto:** Inglés (`DEFAULT_LANG = "en"` en `js/catalog-data.js`). El Español es opcional, activado por el usuario.
+
+| Concepto | Variable | Ubicación | Regla |
+| :--- | :--- | :--- | :--- |
+| Diccionario de textos de servicio | `title: {en, es}`, `description: {en, es}` | `js/catalog-data.js` → `CATALOG_SERVICES[]` | **Rompe el contrato anterior**: `name`/`description` (string plano) quedan REEMPLAZADOS por objetos `{en, es}`. `whatsappMessage` precalculado se ELIMINA — ahora se genera en runtime con `buildCatalogMessage(title, lang)`. |
+| Textos estáticos de UI | `UI_STRINGS = {en, es}` | `js/catalog-data.js` | Claves: `pageTitle`, `subtitle`, `printButton`, `qrCaption`, `langSwitchLabel` |
+| Plantillas de mensaje WhatsApp | `CATALOG_MESSAGE_TEMPLATES = {en, es}` | `js/catalog-data.js` | Función por idioma, recibe el `title` ya traducido |
+| Estado del idioma activo | `let currentLang` | `js/catalog.js` (module-level, no persiste entre reloads — vuelve a `DEFAULT_LANG` al refrescar) | Mutado solo por `bindLangSwitcher()` |
+
+**Flujo de cambio de idioma:** click en `#lang-switch-btn` → `currentLang` alterna `en`/`es` → `renderAll(currentLang)` re-ejecuta `renderStaticStrings()` (header, botones, `document.title`, `document.documentElement.lang`) y `renderCatalog()` (vacía `#catalog-grid` con `innerHTML=""` y reconstruye las 6 tarjetas, incluyendo URL del QR recalculada con el mensaje de WhatsApp en el nuevo idioma).
+
+**Términos prohibidos (rompen el dataset i18n):** `service.name` (usar `service.title[lang]`), `service.whatsappMessage` precalculado (usar `buildCatalogMessage()` en runtime).
+
+**Generación del QR (decisión del Arquitecto 2026-06-22):** SIN librería vendorizada. Se usa la API pública `https://api.qrserver.com/v1/create-qr-code/?size={W}x{H}&format=svg&data={mensaje}` dentro de un `<img>`. El parámetro `format=svg` devuelve un vector nítido a cualquier resolución de impresión (no rasteriza). `js/catalog.js` construye la URL por tarjeta con `encodeURIComponent(whatsappMessage completo con número)`. Requiere conexión a internet al momento de ver/imprimir la página (trade-off aceptado por el Humano frente a vendorizar una librería de terceros).

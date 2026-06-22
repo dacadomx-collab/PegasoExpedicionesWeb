@@ -1,0 +1,230 @@
+/* Pegaso Expediciones — Catálogo Print-First
+   Paleta oficial ALISER/Pegaso (ver assets/css/style.css :root) */
+
+:root {
+  --color-primary: #ffffff;
+  --color-secondary: #0f0200;
+  --color-accent: #f26d52;
+  --color-text: #4c4c4c;
+  --color-bg-soft: #fcfaf5;
+  --color-border: #e7e7e7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg-soft);
+  color: var(--color-text);
+  font-family: "DM Sans", sans-serif;
+}
+
+.catalog-header {
+  text-align: center;
+  padding: 40px 16px 24px;
+}
+
+.catalog-header__logo {
+  max-width: 180px;
+  height: auto;
+  margin-bottom: 16px;
+}
+
+.catalog-header__title {
+  font-family: "Playfair Display", serif;
+  color: var(--color-secondary);
+  font-size: 32px;
+  margin: 0 0 8px;
+}
+
+.catalog-header__subtitle {
+  color: var(--color-text);
+  font-size: 16px;
+  margin: 0 0 20px;
+}
+
+.catalog-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.print-button,
+.lang-switch-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.print-button {
+  background-color: var(--color-accent);
+  color: var(--color-primary);
+  box-shadow: 0 4px 14px rgba(242, 109, 82, 0.35);
+}
+
+.print-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(242, 109, 82, 0.45);
+}
+
+.lang-switch-button {
+  background-color: var(--color-primary);
+  color: var(--color-secondary);
+  border: 2px solid var(--color-secondary);
+  box-shadow: 0 4px 14px rgba(15, 2, 0, 0.12);
+}
+
+.lang-switch-button:hover {
+  transform: translateY(-2px);
+  background-color: var(--color-bg-soft);
+}
+
+/* ===== ARF-GRID: contenedor padre flex, sin anchos fijos en hijos ===== */
+/* 3 columnas por fila: flex-basis calculado (33.33% - gap), NUNCA px fijos */
+.catalog-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px 24px 60px;
+}
+
+.service-card {
+  /* max-width SIEMPRE atado al mismo % que flex-basis: nunca permite que quepa una 4a columna */
+  flex: 0 1 calc(33.333% - 24px);
+  width: calc(33.333% - 24px);
+  max-width: calc(33.333% - 24px);
+  min-width: 280px;
+  background-color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(15, 2, 0, 0.06);
+}
+
+/* Mobile-first (Mandamiento #1): por debajo de 980px no caben 3 columnas cómodas */
+@media (max-width: 979px) {
+  .service-card {
+    flex: 0 1 calc(50% - 24px);
+    width: calc(50% - 24px);
+    max-width: calc(50% - 24px);
+  }
+}
+
+@media (max-width: 639px) {
+  .service-card {
+    flex: 0 1 100%;
+    width: 100%;
+    max-width: 420px;
+  }
+}
+
+.service-card__image-wrap {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background-color: var(--color-border);
+}
+
+.service-card__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.service-card__body {
+  padding: 18px 20px 8px;
+}
+
+.service-card__title {
+  font-family: "Playfair Display", serif;
+  color: var(--color-secondary);
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.service-card__description {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.service-card__qr-wrap {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 20px 22px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.service-card__qr {
+  width: 140px;
+  height: 140px;
+}
+
+.service-card__qr-caption {
+  font-size: 12px;
+  color: var(--color-accent);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ===== Optimización de impresión ===== */
+.no-print {
+  display: block;
+}
+
+@media print {
+  body {
+    background-color: var(--color-primary);
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .catalog-header {
+    padding: 10px 0 16px;
+  }
+
+  .catalog-grid {
+    gap: 16px;
+    padding: 0 8px;
+  }
+
+  .service-card {
+    /* Fuerza exactamente 3 por fila en papel (A4/Letter), sin importar el viewport reducido del motor de impresión */
+    flex: 0 0 calc(33.333% - 16px);
+    width: calc(33.333% - 16px);
+    max-width: calc(33.333% - 16px);
+    min-width: 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #000;
+  }
+
+  .service-card__qr-wrap {
+    border-top: 1px dashed #000;
+  }
+
+  .service-card__qr-caption {
+    color: var(--color-secondary);
+  }
+}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expedition Catalog | Pegaso Expediciones</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/images/favicon/favicon-16x16.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+    <header class="catalog-header">
+        <img class="catalog-header__logo" src="assets/images/logo.png" alt="Pegaso Expediciones">
+        <h1 class="catalog-header__title" id="catalog-title">Expedition Catalog</h1>
+        <p class="catalog-header__subtitle" id="catalog-subtitle">Scan the QR code of your favorite tour and book directly via WhatsApp</p>
+        <div class="catalog-header__actions no-print">
+            <button type="button" class="print-button" id="print-catalog-btn">🖨️ Print Catalog</button>
+            <button type="button" class="lang-switch-button" id="lang-switch-btn">🇲🇽 Cambiar a Español</button>
+        </div>
+    </header>
+
+    <main class="catalog-grid" id="catalog-grid">
+        <!-- Las tarjetas de servicio se generan dinámicamente desde js/catalog-data.js -->
+    </main>
+
+    <script src="js/catalog-data.js"></script>
+    <script src="js/catalog.js"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 // Contratos: 03_CONTRATOS_API_Y_LOGICA.md
 // ============================================================
 
-import type { ApiResponse, Expedition, BookingAdminView, CreateOrderPayload, BookingConfirmation, LoginPayload, LoginResponse, SystemSetting, AdminUser, CreateAdminUserPayload, SaveExpeditionPayload } from "./types"
+import type { ApiResponse, Expedition, BookingAdminView, CreateOrderPayload, BookingConfirmation, LoginPayload, LoginResponse, SystemSetting, AdminUser, CreateAdminUserPayload, SaveExpeditionPayload, WelcomeStatus, SetWelcomeSeenResponse } from "./types"
 
 /** apiFetch con Authorization header — para endpoints protegidos por JWT */
 async function apiFetchAuth<T>(path: string, token: string, init?: RequestInit): Promise<ApiResponse<T>> {
@@ -190,6 +190,39 @@ export async function saveExpedition(
     throw new Error(res.errors?.join(" / ") ?? res.message ?? "No se pudo guardar la expedición.")
   }
   return res.data
+}
+
+// ── FASE 7: Partner Welcome (2026-06-16) ─────────────────────
+// GET /api/welcome_status.php — estado de bienvenida del usuario autenticado
+export async function fetchWelcomeStatus(token: string): Promise<WelcomeStatus> {
+  const res = await apiFetchAuth<WelcomeStatus>("/welcome_status.php", token)
+  if (res.status !== "success" || !res.data) {
+    throw new Error(res.message ?? "No se pudo obtener el estado de bienvenida.")
+  }
+  return res.data
+}
+
+// POST /api/set_welcome_seen.php — registra el primer acceso (fecha_fundacion)
+export async function setWelcomeSeen(token: string): Promise<SetWelcomeSeenResponse> {
+  const res = await apiFetchAuth<SetWelcomeSeenResponse>("/set_welcome_seen.php", token, {
+    method: "POST",
+    body:   JSON.stringify({}),
+  })
+  if (res.status !== "success" || !res.data) {
+    throw new Error(res.message ?? "No se pudo registrar la bienvenida.")
+  }
+  return res.data
+}
+
+// POST /api/reset_welcome.php — resetea fecha_fundacion a NULL (super_admin only)
+export async function resetWelcome(userId: number, token: string): Promise<void> {
+  const res = await apiFetchAuth<unknown>("/reset_welcome.php", token, {
+    method: "POST",
+    body:   JSON.stringify({ user_id: userId }),
+  })
+  if (res.status !== "success") {
+    throw new Error(res.message ?? "No se pudo resetear la bienvenida.")
+  }
 }
 
 // ── POST /toggle_admin_user.php ───────────────────────────────
