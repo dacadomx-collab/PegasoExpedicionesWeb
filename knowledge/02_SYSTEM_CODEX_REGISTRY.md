@@ -535,4 +535,8 @@ interface Tour {
 
 **Términos prohibidos (rompen el dataset i18n):** `service.name` (usar `service.title[lang]`), `service.whatsappMessage` precalculado (usar `buildCatalogMessage()` en runtime).
 
+**Mensaje de WhatsApp (corregido 2026-06-23):** `CATALOG_MESSAGE_TEMPLATES` ya NO saluda a "Daniel" ni agrega la palabra "tour" después del nombre del servicio (bug: títulos que ya terminan en "Tour", ej. "Balandra Boat Tour", generaban "...Balandra Boat Tour tour..."). Plantilla actual: EN `Hello Pegaso, I'm interested in ${title} and I would like to receive more info.` / ES `Hola Pegaso, me interesa ${title} y quiero recibir más información.`. El número de WhatsApp (`WHATSAPP_NUMBER`) sigue siendo el real de Daniel — solo cambió el saludo del texto, no el destinatario.
+
+**Impresión en una sola hoja Carta (corregido 2026-06-23):** `@media print` ahora declara `@page { size: letter portrait; margin: 0.3in; }` y reduce proporcionalmente logo/título/tarjetas/QR para que el logo + 6 tarjetas (grid 3x2) entren en una sola página Letter. Validado generando el PDF real (`page.pdf({ format: 'Letter' })`) y confirmando `numpages === 1` con `pdf-parse`.
+
 **Generación del QR (decisión del Arquitecto 2026-06-22):** SIN librería vendorizada. Se usa la API pública `https://api.qrserver.com/v1/create-qr-code/?size={W}x{H}&format=svg&data={mensaje}` dentro de un `<img>`. El parámetro `format=svg` devuelve un vector nítido a cualquier resolución de impresión (no rasteriza). `js/catalog.js` construye la URL por tarjeta con `encodeURIComponent(whatsappMessage completo con número)`. Requiere conexión a internet al momento de ver/imprimir la página (trade-off aceptado por el Humano frente a vendorizar una librería de terceros).

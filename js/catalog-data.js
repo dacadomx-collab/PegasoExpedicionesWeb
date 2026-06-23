@@ -12,8 +12,8 @@ const DEFAULT_LANG = "en";
 const WHATSAPP_NUMBER = "526121480200";
 
 const CATALOG_MESSAGE_TEMPLATES = {
-  en: (serviceName) => `Hello Daniel, I'm coming from the printed catalog. I am interested in the ${serviceName} tour and would like more info.`,
-  es: (serviceName) => `Hola Daniel, vengo del catálogo impreso. Me interesa el tour de ${serviceName} y quiero más información.`
+  en: (serviceName) => `Hello Pegaso, I'm interested in ${serviceName} and I would like to receive more info.`,
+  es: (serviceName) => `Hola Pegaso, me interesa ${serviceName} y quiero recibir más información.`
 };
 
 function buildCatalogMessage(serviceName, lang) {

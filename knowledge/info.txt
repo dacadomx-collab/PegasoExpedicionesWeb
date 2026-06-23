@@ -31,9 +31,6 @@ Puerto FTPS explícito de FTP &:  21
 
 user: despliegue@pegasoexpediciones.com
 pass: ,#Cn9zYX2W(2=-}n
-
-user: ftp_user@pegasoexpediciones.com
-pass: ZmY?3!O1tUgx+fuv
 *******************************************************************  DataBase  **
 ******************
 Base de datos: pegaso_web_services_DB
