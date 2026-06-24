@@ -21,6 +21,22 @@ function buildCatalogMessage(serviceName, lang) {
   return template(serviceName);
 }
 
+// Correo de contacto invertido a propósito: ningún archivo estático (HTML/JS fuente)
+// contiene la dirección como string literal. Se reconstruye en tiempo de ejecución
+// (ver getContactEmail en catalog.js). Esto frena a los bots de scraping básicos que
+// hacen regex sobre el HTML/JS crudo sin ejecutar JavaScript, sin afectar la
+// usabilidad real (cualquier navegador real ejecuta JS).
+const CONTACT_EMAIL_REVERSED = "moc.liamg@senoicidepxeosagep";
+
+const CONTACT_EMAIL_TEMPLATES = {
+  en: { subject: "Pegaso Expediciones — Catalog Inquiry", body: "Hello Pegaso, I would like more information about your expeditions." },
+  es: { subject: "Pegaso Expediciones — Consulta del Catálogo", body: "Hola Pegaso, quiero más información sobre sus expediciones." }
+};
+
+function buildContactEmailContent(lang) {
+  return CONTACT_EMAIL_TEMPLATES[lang] || CONTACT_EMAIL_TEMPLATES[DEFAULT_LANG];
+}
+
 // Textos de interfaz estáticos (header, botones, leyenda del QR).
 const UI_STRINGS = {
   en: {
@@ -28,14 +44,20 @@ const UI_STRINGS = {
     subtitle: "Scan the QR code of your favorite tour and book directly via WhatsApp",
     printButton: "🖨️ Print Catalog",
     qrCaption: "Scan & book via WhatsApp",
-    langSwitchLabel: "🇲🇽 Cambiar a Español"
+    langSwitchLabel: "🇲🇽 Cambiar a Español",
+    emailButton: "✉️ Email Us",
+    emailIntro: "Prefer email? Write to us at:",
+    emailCopiedFeedback: "Copied to clipboard — paste it in your email app."
   },
   es: {
     pageTitle: "Catálogo de Expediciones",
     subtitle: "Escanea el código QR de tu tour favorito y reserva directo por WhatsApp",
     printButton: "🖨️ Imprimir Catálogo",
     qrCaption: "Escanea y reserva por WhatsApp",
-    langSwitchLabel: "🇺🇸 Switch to English"
+    langSwitchLabel: "🇺🇸 Switch to English",
+    emailButton: "✉️ Escríbenos",
+    emailIntro: "¿Prefieres correo? Escríbenos a:",
+    emailCopiedFeedback: "Copiado al portapapeles — pégalo en tu app de correo."
   }
 };
 

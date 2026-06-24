@@ -22,7 +22,13 @@
         <div class="catalog-header__actions no-print">
             <button type="button" class="print-button" id="print-catalog-btn">🖨️ Print Catalog</button>
             <button type="button" class="lang-switch-button" id="lang-switch-btn">🇲🇽 Cambiar a Español</button>
+            <button type="button" class="email-button" id="email-contact-btn">✉️ Email Us</button>
         </div>
+        <p class="catalog-header__email no-print" id="catalog-email-line"></p>
+        <p class="catalog-header__email-feedback no-print" id="email-feedback" role="status" aria-live="polite"></p>
+        <!-- Solo visible en @media print: en papel no hay clics ni portapapeles,
+             así que el correo debe quedar legible y bilingüe directamente en la hoja. -->
+        <div class="catalog-header__email-print" id="catalog-email-print"></div>
     </header>
 
     <main class="catalog-grid" id="catalog-grid">
