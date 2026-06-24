@@ -49,7 +49,7 @@ const CATALOG_SERVICES = [
       en: "Daily departures at 9:30 AM & 4:30 PM · Duration: 1 hour 20 min approx.",
       es: "Salidas diarias a las 9:30 AM y 4:30 PM · Duración: 1 hora 20 min aprox."
     },
-    image: "Horseback_BG.jpg"
+    image: "Horseback.jpeg"
   },
   {
     id: "tiburon-ballena",
